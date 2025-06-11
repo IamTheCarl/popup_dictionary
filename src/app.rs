@@ -70,12 +70,25 @@ impl eframe::App for MyApp {
             });
             ui.add_space(10.0);
             ui.heading("Definition:");
-
-            // You can add more widgets here, for example, a button:
-            if ui.button("Open in browser").clicked() {
-                //self.text = "Button clicked!".to_owned();
-            }
         });
+        egui::TopBottomPanel::bottom("footer")
+            .min_height(40.0)
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    if ui
+                        .button(RichText::new("Open in browser").size(20.0))
+                        .clicked()
+                    {
+                        ctx.open_url(egui::output::OpenUrl {
+                            url: format!(
+                                "https://jotoba.de/search/0/{}?l=en-US",
+                                get_sentence_string(&self.words)
+                            ),
+                            new_tab: true,
+                        });
+                    }
+                })
+            });
     }
 }
 
@@ -94,4 +107,12 @@ fn add_font(ctx: &egui::Context) {
             },
         ],
     ));
+}
+
+fn get_sentence_string(words: &Vec<ParsedWord>) -> String {
+    let mut sentence: String = String::new();
+    for word in words {
+        sentence.push_str(&format!("{}", word));
+    }
+    sentence
 }

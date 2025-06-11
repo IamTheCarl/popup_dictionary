@@ -7,14 +7,20 @@ use std::fmt;
 
 #[derive(Clone, Debug)]
 pub enum ParsedWord {
-    Valid(String),
+    Valid(ValidWord),
     Invalid(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidWord {
+    word: String,
+    response: Response,
 }
 
 impl fmt::Display for ParsedWord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            ParsedWord::Valid(parsed_word) => write!(f, "{}", parsed_word),
+            ParsedWord::Valid(parsed_word) => write!(f, "{}", parsed_word.word),
             ParsedWord::Invalid(parsed_word) => write!(f, "{}", parsed_word),
         }
     }
@@ -39,7 +45,10 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
                         sentence.clear();
                         sentence.push_str(&remainder_owned);
                         removed = true;
-                        words.push(ParsedWord::Valid(kanji.clone()));
+                        words.push(ParsedWord::Valid(ValidWord {
+                            word: kanji.clone(),
+                            response: response.clone(),
+                        }));
                         break;
                     }
                 }
@@ -52,7 +61,10 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
                     sentence.clear();
                     sentence.push_str(&remainder_owned);
                     //removed = true;
-                    words.push(ParsedWord::Valid(response.words[0].reading.kana.clone()));
+                    words.push(ParsedWord::Valid(ValidWord {
+                        word: response.words[0].reading.kana.clone(),
+                        response: response.clone(),
+                    }));
                 } else {
                     if let Some(first_char) = sentence.chars().next() {
                         let char_len: usize = first_char.len_utf8();
@@ -113,25 +125,25 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
     Ok(words)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Response {
     words: Vec<Word>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Word {
     reading: Reading,
     senses: Vec<Sense>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Reading {
     kana: String,
     #[serde(default)]
     kanji: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Sense {
     glosses: Vec<String>,
 }
