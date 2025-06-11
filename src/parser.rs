@@ -1,9 +1,9 @@
-use core::fmt;
 use curl::easy::Easy;
 use curl::easy::List;
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
+use std::fmt;
 
 #[derive(Clone, Debug)]
 pub enum ParsedWord {
@@ -11,8 +11,8 @@ pub enum ParsedWord {
     Invalid(String),
 }
 
-impl ParsedWord {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ParsedWord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             ParsedWord::Valid(parsed_word) => write!(f, "{}", parsed_word),
             ParsedWord::Invalid(parsed_word) => write!(f, "{}", parsed_word),
