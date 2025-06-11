@@ -1,4 +1,4 @@
-use crate::parser::ParsedWord;
+use crate::parser::{ParsedWord, Reading, Response, Sense, ValidWord, Word};
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
@@ -68,8 +68,39 @@ impl eframe::App for MyApp {
                     };
                 }
             });
+
             ui.add_space(10.0);
             ui.heading("Definition:");
+
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    if let ParsedWord::Valid(valid_word) = &self.words[self.selected] {
+                        for word in &valid_word.response.words {
+                            if let Some(kanji) = &word.reading.kanji {
+                                ui.label(RichText::new(kanji).size(22.0).color(Color32::WHITE));
+                            } else {
+                                ui.label(
+                                    RichText::new(&word.reading.kana)
+                                        .size(22.0)
+                                        .color(Color32::WHITE),
+                                );
+                            }
+                            let mut count: u32 = 1;
+                            for sense in &word.senses {
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{}. {}",
+                                        count,
+                                        sense.glosses.join(", ")
+                                    ))
+                                    .size(18.0),
+                                );
+                                count += 1;
+                            }
+                        }
+                    }
+                });
         });
         egui::TopBottomPanel::bottom("footer")
             .min_height(40.0)

@@ -13,8 +13,8 @@ pub enum ParsedWord {
 
 #[derive(Clone, Debug)]
 pub struct ValidWord {
-    word: String,
-    response: Response,
+    pub word: String,
+    pub response: Response,
 }
 
 impl fmt::Display for ParsedWord {
@@ -126,26 +126,26 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Response {
-    words: Vec<Word>,
+pub struct Response {
+    pub words: Vec<Word>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Word {
-    reading: Reading,
-    senses: Vec<Sense>,
+pub struct Word {
+    pub reading: Reading,
+    pub senses: Vec<Sense>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Reading {
-    kana: String,
+pub struct Reading {
+    pub kana: String,
     #[serde(default)]
-    kanji: Option<String>,
+    pub kanji: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct Sense {
-    glosses: Vec<String>,
+pub struct Sense {
+    pub glosses: Vec<String>,
 }
 
 fn query_words(query: &String) -> Result<Response, Box<dyn Error>> {
