@@ -5,52 +5,90 @@ use serde::Serialize;
 use std::error::Error;
 
 pub fn run(query: &String) -> Result<(), Box<dyn Error>> {
+    let words: Vec<ParsedWord> = parse_words(&query)?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+enum ParsedWord {
+    Valid(String),
+    Invalid(String),
+}
+
+fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
     let mut sentence: String = query.clone();
     println!("{}", sentence);
 
-    let mut words: Vec<String> = Vec::new();
+    let mut words: Vec<ParsedWord> = Vec::new();
     while !sentence.is_empty() {
         let response: Response = query_words(&sentence)?;
-        println!("{:?}", response);
+        //println!("{:?}", response);
         if response.words.len() > 0 {
             let mut removed: bool = false;
 
             for word in &response.words {
-                println!("{:?}", word.reading.kanji);
+                //println!("{:?}", word.reading.kanji);
                 if let Some(kanji) = &word.reading.kanji {
                     if let Some(remainder) = sentence.strip_prefix(kanji) {
                         let remainder_owned: String = remainder.to_string();
                         sentence.clear();
                         sentence.push_str(&remainder_owned);
                         removed = true;
-                        words.push(kanji.clone());
+                        words.push(ParsedWord::Valid(kanji.clone()));
                         break;
                     }
                 }
             }
 
             if !removed {
-                println!("{}", response.words[0].reading.kana);
+                //println!("{}", response.words[0].reading.kana);
                 if let Some(remainder) = sentence.strip_prefix(&response.words[0].reading.kana) {
                     let remainder_owned: String = remainder.to_string();
                     sentence.clear();
                     sentence.push_str(&remainder_owned);
-                    removed = true;
-                    words.push(response.words[0].reading.kana.clone());
+                    //removed = true;
+                    words.push(ParsedWord::Valid(response.words[0].reading.kana.clone()));
                 } else {
                     if let Some(first_char) = sentence.chars().next() {
-                        let char_len = first_char.len_utf8();
-                        sentence.drain(0..char_len);
+                        let char_len: usize = first_char.len_utf8();
+                        let first_char: String = sentence.drain(0..char_len).collect();
+                        let words_len: usize = words.len();
+                        if words_len > 0 {
+                            match words.get_mut(words_len - 1).unwrap() {
+                                ParsedWord::Valid(_) => {
+                                    words.push(ParsedWord::Invalid(first_char));
+                                }
+                                ParsedWord::Invalid(parsed_word) => {
+                                    parsed_word.push_str(&first_char);
+                                }
+                            }
+                        } else {
+                            words.push(ParsedWord::Invalid(first_char));
+                        }
                     } else {
                         return Err(Box::from("Input couldn't be parsed properly."));
                     }
                 }
             }
-            println!("{}", removed);
+            //println!("{}", removed);
         } else {
             if let Some(first_char) = sentence.chars().next() {
-                let char_len = first_char.len_utf8();
-                sentence.drain(0..char_len);
+                let char_len: usize = first_char.len_utf8();
+                let first_char: String = sentence.drain(0..char_len).collect();
+                let words_len: usize = words.len();
+                if words_len > 0 {
+                    match words.get_mut(words_len - 1).unwrap() {
+                        ParsedWord::Valid(_) => {
+                            words.push(ParsedWord::Invalid(first_char));
+                        }
+                        ParsedWord::Invalid(parsed_word) => {
+                            parsed_word.push_str(&first_char);
+                        }
+                    }
+                } else {
+                    words.push(ParsedWord::Invalid(first_char));
+                }
             } else {
                 return Err(Box::from("No matching translation(s) found."));
             }
@@ -68,7 +106,7 @@ pub fn run(query: &String) -> Result<(), Box<dyn Error>> {
     // if it's wrong, GUI can handle it that way.
     // if it's right, it has the Response stored, so GUI can use it on change to that word without having to re-request from server.
 
-    Ok(())
+    Ok(words)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -109,7 +147,7 @@ fn query_words(query: &String) -> Result<Response, Box<dyn Error>> {
         r#"{"query":""#, query, r#"","language":"English"}"#
     );
     let request: &[u8] = request_string.as_bytes();
-    easy.post_fields_copy(request);
+    easy.post_fields_copy(request)?;
 
     {
         let mut transfer = easy.transfer();
