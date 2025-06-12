@@ -31,6 +31,7 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
     println!("{}", sentence);
 
     let mut words: Vec<ParsedWord> = Vec::new();
+    let mut previous_word: String = String::new();
     while !sentence.is_empty() {
         let response: Response = query_words(&sentence)?;
         //println!("{:?}", response);
@@ -60,7 +61,7 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
                     let remainder_owned: String = remainder.to_string();
                     sentence.clear();
                     sentence.push_str(&remainder_owned);
-                    //removed = true;
+                    removed = true;
                     words.push(ParsedWord::Valid(ValidWord {
                         word: response.words[0].reading.kana.clone(),
                         response: response.clone(),
@@ -69,23 +70,43 @@ pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
                     if let Some(first_char) = sentence.chars().next() {
                         let char_len: usize = first_char.len_utf8();
                         let first_char: String = sentence.drain(0..char_len).collect();
+                        previous_word.push_str(&first_char);
                         let words_len: usize = words.len();
                         if words_len > 0 {
-                            match words.get_mut(words_len - 1).unwrap() {
-                                ParsedWord::Valid(_) => {
-                                    words.push(ParsedWord::Invalid(first_char));
+                            if let ParsedWord::Valid(parsed_word) =
+                                words.get_mut(words_len - 1).unwrap()
+                            {
+                                if !parsed_word.word.is_empty() {
+                                    words.push(ParsedWord::Valid(ValidWord {
+                                        word: String::new(),
+                                        response: response.clone(),
+                                    }));
                                 }
-                                ParsedWord::Invalid(parsed_word) => {
-                                    parsed_word.push_str(&first_char);
-                                }
+                            } else {
+                                words.push(ParsedWord::Valid(ValidWord {
+                                    word: String::new(),
+                                    response: response.clone(),
+                                }));
                             }
                         } else {
-                            words.push(ParsedWord::Invalid(first_char));
+                            words.push(ParsedWord::Valid(ValidWord {
+                                word: String::new(),
+                                response: response.clone(),
+                            }));
                         }
                     } else {
                         return Err(Box::from("Input couldn't be parsed properly."));
                     }
                 }
+            }
+            if removed && !previous_word.is_empty() {
+                let words_len: usize = words.len();
+                if let ParsedWord::Valid(parsed_word) = words.get_mut(words_len - 2).unwrap() {
+                    parsed_word.word = previous_word.clone();
+                } else {
+                    return Err(Box::from("Logical error in previous_word."));
+                }
+                previous_word.clear();
             }
             //println!("{}", removed);
         } else {
