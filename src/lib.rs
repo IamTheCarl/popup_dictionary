@@ -1,17 +1,21 @@
 use std::error::Error;
 
 use crate::app::run_app;
-use crate::parser::{ParsedWord, tokenize};
+use crate::dictionary::Dictionary;
+use crate::tokenizer::{ParsedWord, tokenize};
 
 mod app;
-mod parser;
+mod dictionary;
+mod tokenizer;
 
 const DICT_DATA: &[u8] = include_bytes!("./dictionaries/system.dic");
 
 pub fn run(query: &String) -> Result<(), Box<dyn Error>> {
     let words: Vec<ParsedWord> = tokenize(&query)?;
 
-    run_app(&words)?;
+    let dictionary: Dictionary = Dictionary::load_dictionary("./dictionaries/jitendex.db")?;
+
+    run_app(&words, &dictionary)?;
 
     Ok(())
 }

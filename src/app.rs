@@ -1,11 +1,11 @@
-use crate::parser::ParsedWord;
+use crate::{dictionary::Dictionary, tokenizer::ParsedWord};
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, RichText};
 
-pub fn run_app(words: &Vec<ParsedWord>) -> Result<(), eframe::Error> {
+pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), eframe::Error> {
     // Configure native window options
     let options = NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -19,22 +19,28 @@ pub fn run_app(words: &Vec<ParsedWord>) -> Result<(), eframe::Error> {
     eframe::run_native(
         "Popup Dictionary", // The name of your application
         options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(cc, words)))),
+        Box::new(|cc| Ok(Box::new(MyApp::new(cc, words, dictionary)))),
     )
 }
 
 struct MyApp {
     words: Vec<ParsedWord>,
     selected: usize,
+    dictionary: Dictionary,
 }
 
 impl MyApp {
-    fn new(cc: &eframe::CreationContext<'_>, words: &Vec<ParsedWord>) -> Self {
+    fn new(
+        cc: &eframe::CreationContext<'_>,
+        words: &Vec<ParsedWord>,
+        dictionary: &Dictionary,
+    ) -> Self {
         // You can load initial state here if needed
         add_font(&cc.egui_ctx);
         Self {
             words: words.to_vec(),
             selected: 0,
+            dictionary: dictionary.clone(),
         }
     }
 }
@@ -72,29 +78,28 @@ impl eframe::App for MyApp {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    if let Some(response) = self.words[self.selected].get_response() {
-                        for word in &response.words {
-                            if let Some(kanji) = &word.reading.kanji {
-                                ui.label(RichText::new(kanji).size(22.0).color(Color32::WHITE));
-                            } else {
-                                ui.label(
-                                    RichText::new(&word.reading.kana)
-                                        .size(22.0)
-                                        .color(Color32::WHITE),
-                                );
-                            }
+                    if let Some(dictionary_entry) = self
+                        .dictionary
+                        .lookup(&self.words[self.selected].surface)
+                        .unwrap()
+                    {
+                        if !dictionary_entry.term.is_empty() {
+                            ui.label(
+                                RichText::new(dictionary_entry.term)
+                                    .size(22.0)
+                                    .color(Color32::WHITE),
+                            );
+                        } else {
+                            ui.label(
+                                RichText::new(dictionary_entry.reading)
+                                    .size(22.0)
+                                    .color(Color32::WHITE),
+                            );
+                        }
+                        for meaning in &dictionary_entry.meanings {
                             let mut count: u32 = 1;
-                            for sense in &word.senses {
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{}. {}",
-                                        count,
-                                        sense.glosses.join(", ")
-                                    ))
-                                    .size(18.0),
-                                );
-                                count += 1;
-                            }
+                            ui.label(RichText::new(format!("{}. {}", count, meaning)).size(18.0));
+                            count += 1;
                         }
                     }
                 });
