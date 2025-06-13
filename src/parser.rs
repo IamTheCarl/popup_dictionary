@@ -3,147 +3,114 @@ use curl::easy::List;
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
-use std::fmt;
+use vibrato::{Dictionary, Tokenizer};
 
-#[derive(Clone, Debug)]
-pub enum ParsedWord {
-    Valid(ValidWord),
-    Invalid(String),
-}
+// Faster compile
+//use std::fs::File;
 
-#[derive(Clone, Debug)]
-pub struct ValidWord {
-    pub word: String,
-    pub response: Response,
-}
+// Faster run
+const DICT_DATA: &[u8] = include_bytes!("./dictionaries/system.dic");
 
-impl fmt::Display for ParsedWord {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            ParsedWord::Valid(parsed_word) => write!(f, "{}", parsed_word.word),
-            ParsedWord::Invalid(parsed_word) => write!(f, "{}", parsed_word),
-        }
-    }
-}
+pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
+    // Faster compile
+    //let file: File = File::open("src/dictionaries/system.dic")?;
+    //let dict: Dictionary = Dictionary::read(file)?;
 
-pub fn parse_words(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
-    let mut sentence: String = query.clone();
-    println!("{}", sentence);
+    // Faster run
+    let dict: Dictionary = Dictionary::read(std::io::Cursor::new(DICT_DATA))?;
+
+    let tokenizer: Tokenizer = Tokenizer::new(dict);
+    let mut worker = tokenizer.new_worker();
+
+    worker.reset_sentence(query);
+    worker.tokenize();
 
     let mut words: Vec<ParsedWord> = Vec::new();
-    let mut previous_word: String = String::new();
-    while !sentence.is_empty() {
-        let response: Response = query_words(&sentence)?;
-        //println!("{:?}", response);
-        if response.words.len() > 0 {
-            let mut removed: bool = false;
+    for token in worker.token_iter() {
+        words.push(ParsedWord {
+            surface: token.surface().to_string(),
+            response: None,
+            valid_word: Validity::UNKNOWN,
+        });
+    }
+    Ok(words)
+}
 
-            for word in &response.words {
-                //println!("{:?}", word.reading.kanji);
-                if let Some(kanji) = &word.reading.kanji {
-                    if let Some(remainder) = sentence.strip_prefix(kanji) {
-                        let remainder_owned: String = remainder.to_string();
-                        sentence.clear();
-                        sentence.push_str(&remainder_owned);
-                        removed = true;
-                        words.push(ParsedWord::Valid(ValidWord {
-                            word: kanji.clone(),
-                            response: response.clone(),
-                        }));
-                        break;
-                    }
-                }
-            }
+#[derive(Clone)]
+pub struct ParsedWord {
+    pub surface: String,
+    response: Option<Response>,
+    valid_word: Validity,
+}
 
-            if !removed {
-                //println!("{}", response.words[0].reading.kana);
-                if let Some(remainder) = sentence.strip_prefix(&response.words[0].reading.kana) {
-                    let remainder_owned: String = remainder.to_string();
-                    sentence.clear();
-                    sentence.push_str(&remainder_owned);
-                    removed = true;
-                    words.push(ParsedWord::Valid(ValidWord {
-                        word: response.words[0].reading.kana.clone(),
-                        response: response.clone(),
-                    }));
-                } else {
-                    if let Some(first_char) = sentence.chars().next() {
-                        let char_len: usize = first_char.len_utf8();
-                        let first_char: String = sentence.drain(0..char_len).collect();
-                        previous_word.push_str(&first_char);
-                        let words_len: usize = words.len();
-                        if words_len > 0 {
-                            if let ParsedWord::Valid(parsed_word) =
-                                words.get_mut(words_len - 1).unwrap()
-                            {
-                                if !parsed_word.word.is_empty() {
-                                    words.push(ParsedWord::Valid(ValidWord {
-                                        word: String::new(),
-                                        response: response.clone(),
-                                    }));
-                                }
-                            } else {
-                                words.push(ParsedWord::Valid(ValidWord {
-                                    word: String::new(),
-                                    response: response.clone(),
-                                }));
-                            }
-                        } else {
-                            words.push(ParsedWord::Valid(ValidWord {
-                                word: String::new(),
-                                response: response.clone(),
-                            }));
-                        }
+impl ParsedWord {
+    pub fn get_response(&mut self) -> Option<&Response> {
+        match self.valid_word {
+            Validity::VALID => self.response.as_ref(),
+            Validity::INVALID => None,
+            Validity::UNKNOWN => {
+                if let Ok(response) = self.fetch_word() {
+                    if response.words.is_empty() {
+                        self.response = None;
+                        self.valid_word = Validity::INVALID;
                     } else {
-                        return Err(Box::from("Input couldn't be parsed properly."));
-                    }
-                }
-            }
-            if removed && !previous_word.is_empty() {
-                let words_len: usize = words.len();
-                if let ParsedWord::Valid(parsed_word) = words.get_mut(words_len - 2).unwrap() {
-                    parsed_word.word = previous_word.clone();
-                } else {
-                    return Err(Box::from("Logical error in previous_word."));
-                }
-                previous_word.clear();
-            }
-            //println!("{}", removed);
-        } else {
-            if let Some(first_char) = sentence.chars().next() {
-                let char_len: usize = first_char.len_utf8();
-                let first_char: String = sentence.drain(0..char_len).collect();
-                let words_len: usize = words.len();
-                if words_len > 0 {
-                    match words.get_mut(words_len - 1).unwrap() {
-                        ParsedWord::Valid(_) => {
-                            words.push(ParsedWord::Invalid(first_char));
-                        }
-                        ParsedWord::Invalid(parsed_word) => {
-                            parsed_word.push_str(&first_char);
-                        }
+                        self.response = Some(response);
+                        self.valid_word = Validity::VALID;
                     }
                 } else {
-                    words.push(ParsedWord::Invalid(first_char));
+                    self.response = None;
+                    self.valid_word = Validity::INVALID;
                 }
-            } else {
-                return Err(Box::from("No matching translation(s) found."));
+                self.response.as_ref()
             }
         }
     }
-    println!("{:?}", words);
 
-    if words.is_empty() {
-        return Err(Box::from("No matching translation(s) found."));
+    pub fn is_valid(&self) -> bool {
+        match self.valid_word {
+            Validity::INVALID => false,
+            _ => true,
+        }
     }
 
-    // words vector is now populated. query still contains the full sentence.
-    // TODO: rework above code to also store wrong words/symbols in the words vector.
-    // have it be a datatype that stores info on whether it's wrong or not.
-    // if it's wrong, GUI can handle it that way.
-    // if it's right, it has the Response stored, so GUI can use it on change to that word without having to re-request from server.
+    fn fetch_word(&self) -> Result<Response, Box<dyn Error>> {
+        let mut easy = Easy::new();
+        easy.url("https://jotoba.de/api/search/words")?;
+        easy.post(true)?;
+        let mut list = List::new();
+        list.append("Content-Type: application/json")?;
+        easy.http_headers(list)?;
 
-    Ok(words)
+        let mut buf = Vec::new();
+
+        let request_string: String = format!(
+            "{}{}{}",
+            r#"{"query":""#, self.surface, r#"","language":"English"}"#
+        );
+        let request: &[u8] = request_string.as_bytes();
+        easy.post_fields_copy(request)?;
+
+        {
+            let mut transfer = easy.transfer();
+            transfer.write_function(|data| {
+                buf.extend_from_slice(data);
+                Ok(data.len())
+            })?;
+            transfer.perform()?;
+        }
+
+        let json: Response =
+            serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
+
+        Ok(json)
+    }
+}
+
+#[derive(Clone)]
+enum Validity {
+    VALID,
+    INVALID,
+    UNKNOWN,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -167,36 +134,4 @@ pub struct Reading {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Sense {
     pub glosses: Vec<String>,
-}
-
-fn query_words(query: &String) -> Result<Response, Box<dyn Error>> {
-    let mut easy = Easy::new();
-    easy.url("https://jotoba.de/api/search/words")?;
-    easy.post(true)?;
-    let mut list = List::new();
-    list.append("Content-Type: application/json")?;
-    easy.http_headers(list)?;
-
-    let mut buf = Vec::new();
-
-    let request_string: String = format!(
-        "{}{}{}",
-        r#"{"query":""#, query, r#"","language":"English"}"#
-    );
-    let request: &[u8] = request_string.as_bytes();
-    easy.post_fields_copy(request)?;
-
-    {
-        let mut transfer = easy.transfer();
-        transfer.write_function(|data| {
-            buf.extend_from_slice(data);
-            Ok(data.len())
-        })?;
-        transfer.perform()?;
-    }
-
-    let json: Response =
-        serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
-
-    Ok(json)
 }

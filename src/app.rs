@@ -1,4 +1,4 @@
-use crate::parser::{ParsedWord, Reading, Response, Sense, ValidWord, Word};
+use crate::parser::ParsedWord;
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
@@ -45,27 +45,24 @@ impl eframe::App for MyApp {
             ui.heading("Sentence:");
             ui.horizontal_wrapped(|ui| {
                 for (index, word) in self.words.iter().enumerate() {
-                    let mut label_text = RichText::new(format!("{}", word)).size(20.0);
-                    match word {
-                        ParsedWord::Valid(_) => {
-                            label_text = label_text.underline();
-                            if index == self.selected {
-                                label_text = label_text.color(Color32::WHITE);
-                            }
-                            let label = ui
-                                .label(label_text.clone())
-                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                            if label.hovered() {
-                                label.clone().highlight();
-                            }
-                            if label.clicked() {
-                                self.selected = index;
-                            }
+                    let mut label_text = RichText::new(format!("{}", word.surface)).size(20.0);
+                    if word.is_valid() {
+                        label_text = label_text.underline();
+                        if index == self.selected {
+                            label_text = label_text.color(Color32::WHITE);
                         }
-                        ParsedWord::Invalid(_) => {
-                            ui.label(label_text.clone());
+                        let label = ui
+                            .label(label_text.clone())
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                        if label.hovered() {
+                            label.clone().highlight();
                         }
-                    };
+                        if label.clicked() {
+                            self.selected = index;
+                        }
+                    } else {
+                        ui.label(label_text.clone());
+                    }
                 }
             });
 
@@ -75,8 +72,8 @@ impl eframe::App for MyApp {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    if let ParsedWord::Valid(valid_word) = &self.words[self.selected] {
-                        for word in &valid_word.response.words {
+                    if let Some(response) = self.words[self.selected].get_response() {
+                        for word in &response.words {
                             if let Some(kanji) = &word.reading.kanji {
                                 ui.label(RichText::new(kanji).size(22.0).color(Color32::WHITE));
                             } else {
@@ -143,7 +140,7 @@ fn add_font(ctx: &egui::Context) {
 fn get_sentence_string(words: &Vec<ParsedWord>) -> String {
     let mut sentence: String = String::new();
     for word in words {
-        sentence.push_str(&format!("{}", word));
+        sentence.push_str(&format!("{}", word.surface));
     }
     sentence
 }
