@@ -1,8 +1,8 @@
-use curl::easy::Easy;
-use curl::easy::List;
+use curl::easy::{Easy, List};
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
+use vibrato::dictionary::LexType;
 use vibrato::{Dictionary, Tokenizer};
 
 // Faster compile
@@ -27,10 +27,20 @@ pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
 
     let mut words: Vec<ParsedWord> = Vec::new();
     for token in worker.token_iter() {
+        let validity: Validity = match token.lex_type() {
+            LexType::Unknown => Validity::INVALID,
+            _ => {
+                if token.feature().starts_with("特殊") {
+                    Validity::INVALID
+                } else {
+                    Validity::UNKNOWN
+                }
+            }
+        };
         words.push(ParsedWord {
             surface: token.surface().to_string(),
             response: None,
-            valid_word: Validity::UNKNOWN,
+            valid_word: validity,
         });
     }
     Ok(words)
