@@ -2,22 +2,15 @@ use curl::easy::{Easy, List};
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
 use vibrato::dictionary::LexType;
 use vibrato::{Dictionary, Tokenizer};
 
-// Faster compile
-//use std::fs::File;
-
-// Faster run
-const DICT_DATA: &[u8] = include_bytes!("./dictionaries/system.dic");
-
 pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
-    // Faster compile
-    //let file: File = File::open("src/dictionaries/system.dic")?;
-    //let dict: Dictionary = Dictionary::read(file)?;
-
-    // Faster run
-    let dict: Dictionary = Dictionary::read(std::io::Cursor::new(DICT_DATA))?;
+    let file: File = File::open("src/dictionaries/system.dic")?;
+    let reader: BufReader<File> = BufReader::new(file);
+    let dict: Dictionary = Dictionary::read(reader)?;
 
     let tokenizer: Tokenizer = Tokenizer::new(dict);
     let mut worker = tokenizer.new_worker();
