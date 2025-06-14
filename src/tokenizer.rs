@@ -30,8 +30,15 @@ pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
                 }
             }
         };
+
         words.push(ParsedWord {
             surface: token.surface().to_string(),
+            base: token
+                .feature()
+                .split(",")
+                .nth(4)
+                .unwrap_or(token.surface())
+                .to_string(),
             response: None,
             valid_word: validity,
         });
@@ -42,6 +49,7 @@ pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
 #[derive(Clone)]
 pub struct ParsedWord {
     pub surface: String,
+    pub base: String,
     response: Option<Response>,
     valid_word: Validity,
 }

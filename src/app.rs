@@ -80,10 +80,10 @@ impl eframe::App for MyApp {
                 .show(ui, |ui| {
                     if let Some(dictionary_entry) = self
                         .dictionary
-                        .lookup(&self.words[self.selected].surface)
+                        .lookup(&self.words[self.selected].base)
                         .expect(&format!(
                             "Could not find {}",
-                            &self.words[self.selected].surface
+                            &self.words[self.selected].base
                         ))
                     {
                         for dictionary_term in &dictionary_entry.terms {
@@ -110,6 +110,8 @@ impl eframe::App for MyApp {
                             }
                         }
                     }
+
+                    ui.add_space(40.0);
                 });
         });
         egui::TopBottomPanel::bottom("footer")
