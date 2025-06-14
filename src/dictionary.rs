@@ -51,6 +51,8 @@ struct Kana {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Sense {
+    appliesToKanji: Vec<String>,
+    appliesToKana: Vec<String>,
     gloss: Vec<Gloss>,
 }
 
@@ -73,75 +75,86 @@ impl Dictionary {
         let file: File = File::open("./src/dictionaries/jmdict-simplified/jmdict-eng-3.6.1.json")?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
-        for word in &jmdict.words {
-            let mut meanings: Vec<String> = Vec::new();
-            for sense in &word.sense {
-                for gloss in &sense.gloss {
-                    meanings.push(gloss.text.clone());
-                }
-            }
+        let wildcard: String = String::from("*");
 
-            if word.kanji.len() > 0 || word.kana.len() > 0 {
-                // if a kanji has no kana, something is wrong. don't insert.
-                for term in &word.kanji {
-                    if word.kana.len() > 0 {
-                        for reading in &word.kana {
-                            if reading.appliesToKanji.contains(&term.text)
-                                || reading.appliesToKanji.contains(&String::from("*"))
-                            {
-                                //println!("{:?}", term);
-                                //println!("{:?}", reading);
-                                /*println!(
-                                    "term:{} [{},{},{:?}]",
-                                    term.text, term.text, reading.text, meanings
-                                );*/
-                                Self::insert_entry(
-                                    db,
-                                    &format!("term:{}", term.text),
-                                    &term.text,
-                                    &reading.text,
-                                    &meanings,
-                                )?;
-                            }
-                        }
-                    }
-                }
-                for reading in &word.kana {
-                    // if a kana has no kanji, everything is fine. insert without kanji. (else-block)
-                    if word.kanji.len() > 0 {
-                        for term in &word.kanji {
-                            if reading.appliesToKanji.contains(&term.text)
-                                || reading.appliesToKanji.contains(&String::from("*"))
-                            {
-                                /*println!(
-                                    "reading:{} [{},{},{:?}]",
-                                    reading.text, term.text, reading.text, meanings
-                                );*/
-                                Self::insert_entry(
-                                    db,
-                                    &format!("reading:{}", reading.text),
-                                    &term.text,
-                                    &reading.text,
-                                    &meanings,
-                                )?;
-                            }
-                        }
-                    } else {
-                        /*println!(
-                            "reading:{} [{},{},{:?}]",
-                            reading.text, "", reading.text, meanings
-                        );*/
+        for word in &jmdict.words {
+            if !word.kanji.is_empty() {
+                for kanji in &word.kanji {
+                    for kana in word.kana.iter().filter(|kana| {
+                        kana.appliesToKanji.contains(&wildcard)
+                            || kana.appliesToKanji.contains(&kanji.text)
+                    }) {
+                        let meanings: Vec<String> = word
+                            .sense
+                            .iter()
+                            .filter(|sense| {
+                                sense.appliesToKanji.contains(&wildcard)
+                                    || sense.appliesToKanji.contains(&kanji.text)
+                            })
+                            .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
+                            .collect();
+
                         Self::insert_entry(
                             db,
-                            &format!("reading:{}", reading.text),
-                            "",
-                            &reading.text,
+                            &format!("term:{}", kanji.text),
+                            &kanji.text,
+                            &kana.text,
+                            &meanings,
+                        )?;
+                        Self::insert_entry(
+                            db,
+                            &format!("reading:{}", kana.text),
+                            &kanji.text,
+                            &kana.text,
                             &meanings,
                         )?;
                     }
                 }
+
+                for kana in word
+                    .kana
+                    .iter()
+                    .filter(|kana| kana.appliesToKanji.is_empty())
+                {
+                    let meanings: Vec<String> = word
+                        .sense
+                        .iter()
+                        .filter(|sense| {
+                            sense.appliesToKana.contains(&wildcard)
+                                || sense.appliesToKana.contains(&kana.text)
+                        })
+                        .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
+                        .collect();
+
+                    Self::insert_entry(
+                        db,
+                        &format!("reading:{}", kana.text),
+                        "",
+                        &kana.text,
+                        &meanings,
+                    )?;
+                }
+            } else {
+                for kana in &word.kana {
+                    let meanings: Vec<String> = word
+                        .sense
+                        .iter()
+                        .filter(|sense| {
+                            sense.appliesToKana.contains(&wildcard)
+                                || sense.appliesToKana.contains(&kana.text)
+                        })
+                        .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
+                        .collect();
+
+                    Self::insert_entry(
+                        db,
+                        &format!("reading:{}", kana.text),
+                        "",
+                        &kana.text,
+                        &meanings,
+                    )?;
+                }
             }
-            //println!("");
         }
 
         db.flush()?;
