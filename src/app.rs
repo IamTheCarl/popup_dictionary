@@ -81,25 +81,33 @@ impl eframe::App for MyApp {
                     if let Some(dictionary_entry) = self
                         .dictionary
                         .lookup(&self.words[self.selected].surface)
-                        .unwrap()
+                        .expect(&format!(
+                            "Could not find {}",
+                            &self.words[self.selected].surface
+                        ))
                     {
-                        if !dictionary_entry.term.is_empty() {
-                            ui.label(
-                                RichText::new(dictionary_entry.term)
-                                    .size(22.0)
-                                    .color(Color32::WHITE),
-                            );
-                        } else {
-                            ui.label(
-                                RichText::new(dictionary_entry.reading)
-                                    .size(22.0)
-                                    .color(Color32::WHITE),
-                            );
-                        }
-                        for meaning in &dictionary_entry.meanings {
+                        for dictionary_term in &dictionary_entry.terms {
+                            if !dictionary_term.term.is_empty() {
+                                ui.label(
+                                    RichText::new(&dictionary_term.term)
+                                        .size(22.0)
+                                        .color(Color32::WHITE),
+                                );
+                            }
+                            if !dictionary_term.reading.is_empty() {
+                                ui.label(
+                                    RichText::new(&dictionary_term.reading)
+                                        .size(22.0)
+                                        .color(Color32::WHITE),
+                                );
+                            }
                             let mut count: u32 = 1;
-                            ui.label(RichText::new(format!("{}. {}", count, meaning)).size(18.0));
-                            count += 1;
+                            for meaning in &dictionary_term.meanings {
+                                ui.label(
+                                    RichText::new(format!("{}. {}", count, meaning)).size(18.0),
+                                );
+                                count += 1;
+                            }
                         }
                     }
                 });

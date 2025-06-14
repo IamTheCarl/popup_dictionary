@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sled::Db;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
@@ -12,20 +14,176 @@ pub struct Dictionary {
 
 #[derive(bincode::Encode, bincode::Decode)]
 pub struct DictionaryEntry {
+    pub terms: Vec<DictionaryTerm>,
+}
+
+#[derive(bincode::Encode, bincode::Decode)]
+pub struct DictionaryTerm {
     pub term: String,
     pub reading: String,
     pub meanings: Vec<String>,
 }
 
+// JMDict json
+#[derive(Serialize, Deserialize)]
+struct JMDict {
+    tags: HashMap<String, String>,
+    words: Vec<Word>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Word {
+    kanji: Vec<Kanji>,
+    kana: Vec<Kana>,
+    sense: Vec<Sense>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Kanji {
+    text: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Kana {
+    text: String,
+    appliesToKanji: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Sense {
+    gloss: Vec<Gloss>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Gloss {
+    text: String,
+}
+// ---
+
 impl Dictionary {
     pub fn load_dictionary(path: &str) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
         if !db.was_recovered() {
-            Self::parse_jitendex(&db)?;
+            Self::parse_jmdict_simplified(&db)?;
         }
         Ok(Self { db })
     }
 
+    fn parse_jmdict_simplified(db: &Db) -> Result<(), Box<dyn Error>> {
+        let file: File = File::open("./src/dictionaries/jmdict-simplified/jmdict-eng-3.6.1.json")?;
+        let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
+
+        for word in &jmdict.words {
+            let mut meanings: Vec<String> = Vec::new();
+            for sense in &word.sense {
+                for gloss in &sense.gloss {
+                    meanings.push(gloss.text.clone());
+                }
+            }
+
+            if word.kanji.len() > 0 || word.kana.len() > 0 {
+                // if a kanji has no kana, something is wrong. don't insert.
+                for term in &word.kanji {
+                    if word.kana.len() > 0 {
+                        for reading in &word.kana {
+                            if reading.appliesToKanji.contains(&term.text)
+                                || reading.appliesToKanji.contains(&String::from("*"))
+                            {
+                                //println!("{:?}", term);
+                                //println!("{:?}", reading);
+                                /*println!(
+                                    "term:{} [{},{},{:?}]",
+                                    term.text, term.text, reading.text, meanings
+                                );*/
+                                Self::insert_entry(
+                                    db,
+                                    &format!("term:{}", term.text),
+                                    &term.text,
+                                    &reading.text,
+                                    &meanings,
+                                )?;
+                            }
+                        }
+                    }
+                }
+                for reading in &word.kana {
+                    // if a kana has no kanji, everything is fine. insert without kanji. (else-block)
+                    if word.kanji.len() > 0 {
+                        for term in &word.kanji {
+                            if reading.appliesToKanji.contains(&term.text)
+                                || reading.appliesToKanji.contains(&String::from("*"))
+                            {
+                                /*println!(
+                                    "reading:{} [{},{},{:?}]",
+                                    reading.text, term.text, reading.text, meanings
+                                );*/
+                                Self::insert_entry(
+                                    db,
+                                    &format!("reading:{}", reading.text),
+                                    &term.text,
+                                    &reading.text,
+                                    &meanings,
+                                )?;
+                            }
+                        }
+                    } else {
+                        /*println!(
+                            "reading:{} [{},{},{:?}]",
+                            reading.text, "", reading.text, meanings
+                        );*/
+                        Self::insert_entry(
+                            db,
+                            &format!("reading:{}", reading.text),
+                            "",
+                            &reading.text,
+                            &meanings,
+                        )?;
+                    }
+                }
+            }
+            //println!("");
+        }
+
+        db.flush()?;
+        //println!("Loaded {} entries into dictionary", entries.len());
+
+        Ok(())
+    }
+
+    fn insert_entry(
+        db: &Db,
+        key: &str,
+        term: &str,
+        reading: &str,
+        meanings: &Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
+        let dictionary_term: DictionaryTerm = DictionaryTerm {
+            term: term.to_string(),
+            reading: reading.to_string(),
+            meanings: meanings.to_vec(),
+        };
+
+        if let Some(serialized_entry) = db.get(key)? {
+            let (mut dictionary_entry, _): (DictionaryEntry, usize) =
+                bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
+            dictionary_entry.terms.push(dictionary_term);
+            let serialized_entry: Vec<u8> =
+                bincode::encode_to_vec(&dictionary_entry, bincode::config::standard())?;
+            _ = db.insert(key, serialized_entry.as_slice())?;
+        } else {
+            let dictionary_entry = DictionaryEntry {
+                terms: vec![dictionary_term],
+            };
+            let serialized_entry: Vec<u8> =
+                bincode::encode_to_vec(&dictionary_entry, bincode::config::standard())?;
+
+            _ = db.insert(key, serialized_entry.as_slice())?;
+        }
+
+        Ok(())
+    }
+
+    /*
     fn parse_jitendex(db: &Db) -> Result<(), Box<dyn Error>> {
         let mut num = 1;
         let mut current_path = format!(
@@ -45,7 +203,7 @@ impl Dictionary {
                         let mut meanings: Vec<String> = Vec::new();
                         if let Some(definitions) = entry_array[5].as_array() {
                             if !definitions.is_empty() {
-                                meanings.extend(Self::extract_meanings(&definitions[0]));
+                                meanings.extend(Self::jitendex_extract_meanings(&definitions[0]));
                             }
                         }
                         if !meanings.is_empty() {
@@ -90,7 +248,7 @@ impl Dictionary {
         Ok(())
     }
 
-    fn extract_meanings(value: &Value) -> Vec<String> {
+    fn jitendex_extract_meanings(value: &Value) -> Vec<String> {
         let mut meanings = Vec::new();
 
         match value {
@@ -100,32 +258,34 @@ impl Dictionary {
                         if let Value::String(s) = val {
                             meanings.push(s.clone());
                         } else {
-                            meanings.extend(Self::extract_meanings(val));
+                            meanings.extend(Self::jitendex_extract_meanings(val));
                         }
                     } else {
-                        meanings.extend(Self::extract_meanings(val));
+                        meanings.extend(Self::jitendex_extract_meanings(val));
                     }
                 }
             }
             Value::Array(arr) => {
                 for item in arr {
-                    meanings.extend(Self::extract_meanings(item));
+                    meanings.extend(Self::jitendex_extract_meanings(item));
                 }
             }
             _ => {}
         }
         meanings
-    }
+    }*/
 
     pub fn lookup(&self, word: &str) -> Result<Option<DictionaryEntry>, Box<dyn Error>> {
         if let Some(serialized_entry) = self.db.get(format!("term:{}", word))? {
             let (entry, _): (DictionaryEntry, usize) =
-                bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
+                bincode::decode_from_slice(&serialized_entry, bincode::config::standard())
+                    .expect(&format!("{:?}", &serialized_entry));
             return Ok(Some(entry));
         }
         if let Some(serialized_entry) = self.db.get(format!("reading:{}", word))? {
             let (entry, _): (DictionaryEntry, usize) =
-                bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
+                bincode::decode_from_slice(&serialized_entry, bincode::config::standard())
+                    .expect("reading");
             return Ok(Some(entry));
         }
         Ok(None)
