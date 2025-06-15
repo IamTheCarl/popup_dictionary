@@ -12,14 +12,15 @@ pub struct Dictionary {
     db: Db,
 }
 
-#[derive(bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode, Debug)]
 pub struct DictionaryEntry {
     pub terms: Vec<DictionaryTerm>,
 }
 
-#[derive(bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
 pub struct DictionaryTerm {
     pub frequency: Option<u32>,
+    pub common: bool,
     pub term: String,
     pub reading: String,
     pub furigana: Option<Vec<Furigana>>,
@@ -42,11 +43,13 @@ struct Word {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Kanji {
+    common: bool,
     text: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Kana {
+    common: bool,
     text: String,
     appliesToKanji: Vec<String>,
 }
@@ -114,19 +117,30 @@ impl Dictionary {
                             .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
                             .collect();
 
+                        let mut frequency = frequency_map.get(&kanji.text);
+                        if frequency.is_none() {
+                            frequency = frequency_map.get(&kana.text);
+                        }
                         Self::insert_entry(
                             db,
                             &format!("term:{}", kanji.text),
-                            &frequency_map.get(&kanji.text),
+                            &frequency,
+                            &kanji.common,
                             &kanji.text,
                             &kana.text,
                             &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
                             &meanings,
                         )?;
+
+                        let mut frequency = frequency_map.get(&kana.text);
+                        if frequency.is_none() {
+                            frequency = frequency_map.get(&kanji.text);
+                        }
                         Self::insert_entry(
                             db,
                             &format!("reading:{}", kana.text),
-                            &frequency_map.get(&kanji.text),
+                            &frequency,
+                            &kana.common,
                             &kanji.text,
                             &kana.text,
                             &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
@@ -154,6 +168,7 @@ impl Dictionary {
                         db,
                         &format!("reading:{}", kana.text),
                         &frequency_map.get(&kana.text),
+                        &kana.common,
                         "",
                         &kana.text,
                         &None,
@@ -176,6 +191,7 @@ impl Dictionary {
                         db,
                         &format!("reading:{}", kana.text),
                         &frequency_map.get(&kana.text),
+                        &kana.common,
                         "",
                         &kana.text,
                         &None,
@@ -186,7 +202,6 @@ impl Dictionary {
         }
 
         db.flush()?;
-        //println!("Loaded {} entries into dictionary", entries.len());
 
         Ok(())
     }
@@ -225,6 +240,7 @@ impl Dictionary {
         db: &Db,
         key: &str,
         frequency: &Option<&u32>,
+        common: &bool,
         term: &str,
         reading: &str,
         furigana: &Option<&Vec<Furigana>>,
@@ -240,35 +256,115 @@ impl Dictionary {
         };
         let dictionary_term: DictionaryTerm = DictionaryTerm {
             frequency,
+            common: *common,
             term: term.to_string(),
             reading: reading.to_string(),
             furigana,
             meanings: meanings.to_vec(),
         };
-
+        if term == "私" {
+            println!(
+                "{},{},{},{}",
+                term,
+                reading,
+                common,
+                frequency.unwrap_or(u32::MAX)
+            )
+        }
         if let Some(serialized_entry) = db.get(key)? {
             let (mut dictionary_entry, _): (DictionaryEntry, usize) =
                 bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
 
-            match frequency {
-                Some(freq_value) => {
-                    let insert_index: usize = dictionary_entry
-                        .terms
-                        .binary_search_by_key(&freq_value, |term| {
-                            term.frequency.unwrap_or(u32::MAX)
-                        })
-                        .unwrap_or_else(|pos| pos);
-                    dictionary_entry.terms.insert(insert_index, dictionary_term);
+            /*
+            Sorting of terms in each entry:
+            1. common, freq         -- first
+            2. common, no freq
+            3. uncommon, freq
+            4. uncommon, no freq    -- last
+            */
+            //TODO: implement combining terms with the same meanings into one with "alternative readings"
+            if *common {
+                if let Some(frequency) = frequency {
+                    let mut inserted: bool = false;
+                    for (index, term) in dictionary_entry.terms.iter().enumerate() {
+                        if !term.common || term.frequency.is_none() {
+                            dictionary_entry
+                                .terms
+                                .insert(index, dictionary_term.clone());
+                            inserted = true;
+                            break;
+                        }
+                        if let Some(term_frequency) = term.frequency {
+                            if term_frequency > frequency {
+                                dictionary_entry
+                                    .terms
+                                    .insert(index, dictionary_term.clone());
+                                inserted = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !inserted {
+                        dictionary_entry.terms.push(dictionary_term.clone());
+                    }
+                } else {
+                    let mut inserted = false;
+                    for (index, term) in dictionary_entry.terms.iter().enumerate() {
+                        if !term.common {
+                            dictionary_entry
+                                .terms
+                                .insert(index, dictionary_term.clone());
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    if !inserted {
+                        dictionary_entry.terms.push(dictionary_term.clone());
+                    }
                 }
-                None => {
-                    dictionary_entry.terms.push(dictionary_term);
+            } else {
+                if let Some(frequency) = frequency {
+                    let mut inserted: bool = false;
+                    for (index, term) in dictionary_entry.terms.iter().enumerate() {
+                        if term.common {
+                            continue;
+                        }
+                        if !term.common && term.frequency.is_none() {
+                            dictionary_entry
+                                .terms
+                                .insert(index, dictionary_term.clone());
+                            inserted = true;
+                            break;
+                        }
+                        if let Some(term_frequency) = term.frequency {
+                            if term_frequency > frequency {
+                                dictionary_entry
+                                    .terms
+                                    .insert(index, dictionary_term.clone());
+                                inserted = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !inserted {
+                        dictionary_entry.terms.push(dictionary_term.clone());
+                    }
+                } else {
+                    dictionary_entry.terms.push(dictionary_term.clone());
                 }
-            };
+            }
+
+            if term == "私" {
+                println!("{:?}", dictionary_entry);
+            }
 
             let serialized_entry: Vec<u8> =
                 bincode::encode_to_vec(&dictionary_entry, bincode::config::standard())?;
             _ = db.insert(key, serialized_entry.as_slice())?;
         } else {
+            if term == "私" {
+                println!("[]");
+            }
             let dictionary_entry = DictionaryEntry {
                 terms: vec![dictionary_term],
             };
