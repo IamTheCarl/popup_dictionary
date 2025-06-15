@@ -4,7 +4,7 @@ use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
 #[derive(Clone)]
@@ -22,6 +22,7 @@ pub struct DictionaryTerm {
     pub frequency: Option<u32>,
     pub term: String,
     pub reading: String,
+    pub furigana: Option<Vec<Furigana>>,
     pub meanings: Vec<String>,
 }
 
@@ -63,6 +64,21 @@ struct Gloss {
 }
 // ---
 
+// jmdict-furigana json
+#[derive(Serialize, Deserialize, Debug)]
+struct JMDictFurigana {
+    text: String,
+    reading: String,
+    furigana: Vec<Furigana>,
+}
+
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode, Clone, Debug)]
+pub struct Furigana {
+    pub ruby: String,
+    pub rt: Option<String>,
+}
+// ---
+
 impl Dictionary {
     pub fn load_dictionary(path: &str) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
@@ -74,6 +90,7 @@ impl Dictionary {
 
     fn parse_jmdict_simplified(db: &Db) -> Result<(), Box<dyn Error>> {
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
+        let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
         let file: File = File::open("./src/dictionaries/jmdict-simplified/jmdict-eng-3.6.1.json")?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
@@ -103,6 +120,7 @@ impl Dictionary {
                             &frequency_map.get(&kanji.text),
                             &kanji.text,
                             &kana.text,
+                            &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
                             &meanings,
                         )?;
                         Self::insert_entry(
@@ -111,6 +129,7 @@ impl Dictionary {
                             &frequency_map.get(&kanji.text),
                             &kanji.text,
                             &kana.text,
+                            &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
                             &meanings,
                         )?;
                     }
@@ -137,6 +156,7 @@ impl Dictionary {
                         &frequency_map.get(&kana.text),
                         "",
                         &kana.text,
+                        &None,
                         &meanings,
                     )?;
                 }
@@ -158,6 +178,7 @@ impl Dictionary {
                         &frequency_map.get(&kana.text),
                         "",
                         &kana.text,
+                        &None,
                         &meanings,
                     )?;
                 }
@@ -184,22 +205,44 @@ impl Dictionary {
         Ok(frequency_map)
     }
 
+    fn parse_jmdict_furigana() -> Result<HashMap<String, Vec<Furigana>>, Box<dyn Error>> {
+        let mut furigana_map: HashMap<String, Vec<Furigana>> = HashMap::new();
+
+        let file: File = File::open("./src/dictionaries/jmdict-furigana.json")?;
+        let json: Vec<JMDictFurigana> = serde_json::from_reader(BufReader::new(file))?;
+
+        for jmdict_furigana in json {
+            furigana_map.insert(
+                format!("{},{}", jmdict_furigana.text, jmdict_furigana.reading),
+                jmdict_furigana.furigana,
+            );
+        }
+
+        Ok(furigana_map)
+    }
+
     fn insert_entry(
         db: &Db,
         key: &str,
         frequency: &Option<&u32>,
         term: &str,
         reading: &str,
+        furigana: &Option<&Vec<Furigana>>,
         meanings: &Vec<String>,
     ) -> Result<(), Box<dyn Error>> {
         let frequency: Option<u32> = match frequency {
             Some(freq_value) => Some(**freq_value),
             None => None,
         };
+        let furigana: Option<Vec<Furigana>> = match furigana {
+            Some(furigana_vec) => Some(furigana_vec.to_vec()),
+            None => None,
+        };
         let dictionary_term: DictionaryTerm = DictionaryTerm {
             frequency,
             term: term.to_string(),
             reading: reading.to_string(),
+            furigana,
             meanings: meanings.to_vec(),
         };
 

@@ -1,9 +1,12 @@
-use crate::{dictionary::Dictionary, tokenizer::ParsedWord};
+use crate::{
+    dictionary::{Dictionary, Furigana},
+    tokenizer::ParsedWord,
+};
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
-use egui::{Color32, RichText};
+use egui::{Color32, RichText, Ui};
 
 pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), eframe::Error> {
     // Configure native window options
@@ -41,6 +44,78 @@ impl MyApp {
             words: words.to_vec(),
             selected: 0,
             dictionary: dictionary.clone(),
+        }
+    }
+
+    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>) {
+        let main_font_size: f32 = 22.0;
+        let furigana_font_size: f32 = 14.0;
+        let vertical_gap: f32 = 1.0;
+
+        // calculate how wide (and tall) the entire string will be
+        let mut total_width: f32 = 0.0;
+        let mut max_height: f32 = 0.0;
+        let mut galley_data = Vec::new();
+
+        for furigana in furigana_vec {
+            let main_galley = ui.fonts(|f| {
+                f.layout_no_wrap(
+                    furigana.ruby.to_string(),
+                    egui::FontId::proportional(main_font_size),
+                    Color32::WHITE,
+                )
+            });
+
+            let furigana_galley = if let Some(reading) = &furigana.rt {
+                ui.fonts(|f| {
+                    f.layout_no_wrap(
+                        reading.to_string(),
+                        egui::FontId::proportional(furigana_font_size),
+                        Color32::LIGHT_GRAY,
+                    )
+                })
+            } else {
+                ui.fonts(|f| {
+                    f.layout_no_wrap(
+                        "あ".to_string(), // invisible placeholder
+                        egui::FontId::proportional(furigana_font_size),
+                        Color32::TRANSPARENT,
+                    )
+                })
+            };
+
+            let char_width: f32 = main_galley.size().x.max(furigana_galley.size().x);
+            let char_height: f32 = main_galley.size().y + furigana_galley.size().y + vertical_gap;
+
+            total_width += char_width;
+            max_height = max_height.max(char_height);
+
+            galley_data.push((main_galley, furigana_galley, char_width));
+        }
+
+        // then draw without gap between galleys
+        let (rect, _) = ui.allocate_exact_size(
+            egui::Vec2::new(total_width, max_height),
+            egui::Sense::empty(),
+        );
+
+        let mut current_x: f32 = rect.left();
+        for (main_galley, furigana_galley, char_width) in galley_data {
+            let furigana_pos = egui::Pos2::new(
+                current_x + (char_width - furigana_galley.size().x) * 0.5,
+                rect.top(),
+            );
+            ui.painter()
+                .galley(furigana_pos, furigana_galley, Color32::PLACEHOLDER);
+
+            let main_pos = egui::Pos2::new(
+                current_x + (char_width - main_galley.size().x) * 0.5,
+                rect.top() + furigana_font_size + vertical_gap,
+            );
+            ui.painter()
+                .galley(main_pos, main_galley, Color32::PLACEHOLDER);
+
+            current_x += char_width;
         }
     }
 }
@@ -89,16 +164,15 @@ impl eframe::App for MyApp {
                         for dictionary_term in &dictionary_entry.terms {
                             ui.horizontal(|ui| {
                                 if !dictionary_term.term.is_empty() {
-                                    ui.label(
-                                        RichText::new(&dictionary_term.term)
-                                            .size(22.0)
-                                            .color(Color32::WHITE),
-                                    );
-                                    ui.label(
-                                        RichText::new(format!("({})", dictionary_term.reading))
-                                            .size(18.0)
-                                            .color(Color32::WHITE),
-                                    );
+                                    if let Some(furigana_vec) = &dictionary_term.furigana {
+                                        Self::display_furigana(ui, furigana_vec);
+                                    } else {
+                                        let furigana: Vec<Furigana> = vec![Furigana {
+                                            ruby: dictionary_term.term.to_string(),
+                                            rt: Some(dictionary_term.reading.to_string()),
+                                        }];
+                                        Self::display_furigana(ui, &furigana);
+                                    }
                                 } else {
                                     ui.label(
                                         RichText::new(&dictionary_term.reading)
@@ -106,22 +180,35 @@ impl eframe::App for MyApp {
                                             .color(Color32::WHITE),
                                     );
                                 }
+                                /*
                                 if let Some(frequency) = dictionary_term.frequency {
                                     ui.label(
                                         RichText::new(format!("freq:{}", frequency))
                                             .size(12.0)
                                             .color(Color32::WHITE),
                                     );
-                                }
+                                }*/
                             });
 
                             let mut count: u32 = 1;
                             for meaning in &dictionary_term.meanings {
-                                ui.label(
-                                    RichText::new(format!("{}. {}", count, meaning)).size(18.0),
-                                );
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(format!("{}.", count))
+                                            .size(18.0)
+                                            .color(Color32::GRAY),
+                                    );
+                                    ui.label(
+                                        RichText::new(format!("{}", meaning))
+                                            .size(18.0)
+                                            .color(Color32::WHITE),
+                                    );
+                                });
+
                                 count += 1;
                             }
+
+                            ui.separator();
                         }
                     }
 
