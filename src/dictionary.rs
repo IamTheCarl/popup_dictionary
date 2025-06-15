@@ -4,7 +4,7 @@ use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 #[derive(Clone)]
@@ -19,6 +19,7 @@ pub struct DictionaryEntry {
 
 #[derive(bincode::Encode, bincode::Decode)]
 pub struct DictionaryTerm {
+    pub frequency: Option<u32>,
     pub term: String,
     pub reading: String,
     pub meanings: Vec<String>,
@@ -72,6 +73,8 @@ impl Dictionary {
     }
 
     fn parse_jmdict_simplified(db: &Db) -> Result<(), Box<dyn Error>> {
+        let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
+
         let file: File = File::open("./src/dictionaries/jmdict-simplified/jmdict-eng-3.6.1.json")?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
@@ -97,6 +100,7 @@ impl Dictionary {
                         Self::insert_entry(
                             db,
                             &format!("term:{}", kanji.text),
+                            &frequency_map.get(&kanji.text),
                             &kanji.text,
                             &kana.text,
                             &meanings,
@@ -104,6 +108,7 @@ impl Dictionary {
                         Self::insert_entry(
                             db,
                             &format!("reading:{}", kana.text),
+                            &frequency_map.get(&kanji.text),
                             &kanji.text,
                             &kana.text,
                             &meanings,
@@ -129,6 +134,7 @@ impl Dictionary {
                     Self::insert_entry(
                         db,
                         &format!("reading:{}", kana.text),
+                        &frequency_map.get(&kana.text),
                         "",
                         &kana.text,
                         &meanings,
@@ -149,6 +155,7 @@ impl Dictionary {
                     Self::insert_entry(
                         db,
                         &format!("reading:{}", kana.text),
+                        &frequency_map.get(&kana.text),
                         "",
                         &kana.text,
                         &meanings,
@@ -163,14 +170,34 @@ impl Dictionary {
         Ok(())
     }
 
+    fn parse_leeds_frequencies() -> Result<HashMap<String, u32>, Box<dyn Error>> {
+        let mut frequency_map: HashMap<String, u32> = HashMap::new();
+        let file: File = File::open("./src/dictionaries/leeds-corpus-frequency.txt")?;
+
+        // note: prone to overflow?
+        let mut line_num: u32 = 0;
+        for line in BufReader::new(file).lines().map_while(Result::ok) {
+            frequency_map.insert(line, line_num);
+            line_num += 1;
+        }
+
+        Ok(frequency_map)
+    }
+
     fn insert_entry(
         db: &Db,
         key: &str,
+        frequency: &Option<&u32>,
         term: &str,
         reading: &str,
         meanings: &Vec<String>,
     ) -> Result<(), Box<dyn Error>> {
+        let frequency: Option<u32> = match frequency {
+            Some(freq_value) => Some(**freq_value),
+            None => None,
+        };
         let dictionary_term: DictionaryTerm = DictionaryTerm {
+            frequency,
             term: term.to_string(),
             reading: reading.to_string(),
             meanings: meanings.to_vec(),
@@ -179,7 +206,22 @@ impl Dictionary {
         if let Some(serialized_entry) = db.get(key)? {
             let (mut dictionary_entry, _): (DictionaryEntry, usize) =
                 bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
-            dictionary_entry.terms.push(dictionary_term);
+
+            match frequency {
+                Some(freq_value) => {
+                    let insert_index: usize = dictionary_entry
+                        .terms
+                        .binary_search_by_key(&freq_value, |term| {
+                            term.frequency.unwrap_or(u32::MAX)
+                        })
+                        .unwrap_or_else(|pos| pos);
+                    dictionary_entry.terms.insert(insert_index, dictionary_term);
+                }
+                None => {
+                    dictionary_entry.terms.push(dictionary_term);
+                }
+            };
+
             let serialized_entry: Vec<u8> =
                 bincode::encode_to_vec(&dictionary_entry, bincode::config::standard())?;
             _ = db.insert(key, serialized_entry.as_slice())?;

@@ -87,20 +87,34 @@ impl eframe::App for MyApp {
                         ))
                     {
                         for dictionary_term in &dictionary_entry.terms {
-                            if !dictionary_term.term.is_empty() {
-                                ui.label(
-                                    RichText::new(&dictionary_term.term)
-                                        .size(22.0)
-                                        .color(Color32::WHITE),
-                                );
-                            }
-                            if !dictionary_term.reading.is_empty() {
-                                ui.label(
-                                    RichText::new(&dictionary_term.reading)
-                                        .size(22.0)
-                                        .color(Color32::WHITE),
-                                );
-                            }
+                            ui.horizontal(|ui| {
+                                if !dictionary_term.term.is_empty() {
+                                    ui.label(
+                                        RichText::new(&dictionary_term.term)
+                                            .size(22.0)
+                                            .color(Color32::WHITE),
+                                    );
+                                    ui.label(
+                                        RichText::new(format!("({})", dictionary_term.reading))
+                                            .size(18.0)
+                                            .color(Color32::WHITE),
+                                    );
+                                } else {
+                                    ui.label(
+                                        RichText::new(&dictionary_term.reading)
+                                            .size(22.0)
+                                            .color(Color32::WHITE),
+                                    );
+                                }
+                                if let Some(frequency) = dictionary_term.frequency {
+                                    ui.label(
+                                        RichText::new(format!("freq:{}", frequency))
+                                            .size(12.0)
+                                            .color(Color32::WHITE),
+                                    );
+                                }
+                            });
+
                             let mut count: u32 = 1;
                             for meaning in &dictionary_term.meanings {
                                 ui.label(
