@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct Dictionary {
@@ -83,7 +83,7 @@ pub struct Furigana {
 // ---
 
 impl Dictionary {
-    pub fn load_dictionary(path: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn load_dictionary(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
         if !db.was_recovered() {
             Self::parse_jmdict_simplified(&db)?;
@@ -95,7 +95,11 @@ impl Dictionary {
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
-        let file: File = File::open("./src/dictionaries/jmdict-simplified/jmdict-eng-3.6.1.json")?;
+        let jmdict_simplified_path: PathBuf = match dirs::config_dir() {
+            Some(path) => path.join("popup_dictionary/dicts/jmdict-simplified.json"),
+            None => Err("No valid config path found in environment variables.")?,
+        };
+        let file: File = File::open(jmdict_simplified_path)?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
         let wildcard: String = String::from("*");
@@ -208,7 +212,11 @@ impl Dictionary {
 
     fn parse_leeds_frequencies() -> Result<HashMap<String, u32>, Box<dyn Error>> {
         let mut frequency_map: HashMap<String, u32> = HashMap::new();
-        let file: File = File::open("./src/dictionaries/leeds-corpus-frequency.txt")?;
+        let leeds_frequency_path: PathBuf = match dirs::config_dir() {
+            Some(path) => path.join("popup_dictionary/dicts/leeds-corpus-frequency.txt"),
+            None => Err("No valid config path found in environment variables.")?,
+        };
+        let file: File = File::open(leeds_frequency_path)?;
 
         // note: prone to overflow?
         let mut line_num: u32 = 0;
@@ -223,7 +231,11 @@ impl Dictionary {
     fn parse_jmdict_furigana() -> Result<HashMap<String, Vec<Furigana>>, Box<dyn Error>> {
         let mut furigana_map: HashMap<String, Vec<Furigana>> = HashMap::new();
 
-        let file: File = File::open("./src/dictionaries/jmdict-furigana.json")?;
+        let jmdict_furigana_path: PathBuf = match dirs::config_dir() {
+            Some(path) => path.join("popup_dictionary/dicts/jmdict-furigana.json"),
+            None => Err("No valid config path found in environment variables.")?,
+        };
+        let file: File = File::open(jmdict_furigana_path)?;
         let json: Vec<JMDictFurigana> = serde_json::from_reader(BufReader::new(file))?;
 
         for jmdict_furigana in json {
@@ -262,15 +274,7 @@ impl Dictionary {
             furigana,
             meanings: meanings.to_vec(),
         };
-        if term == "私" {
-            println!(
-                "{},{},{},{}",
-                term,
-                reading,
-                common,
-                frequency.unwrap_or(u32::MAX)
-            )
-        }
+
         if let Some(serialized_entry) = db.get(key)? {
             let (mut dictionary_entry, _): (DictionaryEntry, usize) =
                 bincode::decode_from_slice(&serialized_entry, bincode::config::standard())?;
@@ -354,17 +358,10 @@ impl Dictionary {
                 }
             }
 
-            if term == "私" {
-                println!("{:?}", dictionary_entry);
-            }
-
             let serialized_entry: Vec<u8> =
                 bincode::encode_to_vec(&dictionary_entry, bincode::config::standard())?;
             _ = db.insert(key, serialized_entry.as_slice())?;
         } else {
-            if term == "私" {
-                println!("[]");
-            }
             let dictionary_entry = DictionaryEntry {
                 terms: vec![dictionary_term],
             };

@@ -180,14 +180,14 @@ impl eframe::App for MyApp {
                                             .color(Color32::WHITE),
                                     );
                                 }
-                                /*
+
                                 if let Some(frequency) = dictionary_term.frequency {
                                     ui.label(
                                         RichText::new(format!("freq:{}", frequency))
                                             .size(12.0)
                                             .color(Color32::WHITE),
                                     );
-                                }*/
+                                }
                             });
 
                             let mut count: u32 = 1;

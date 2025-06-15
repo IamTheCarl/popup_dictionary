@@ -4,11 +4,16 @@ use serde::Serialize;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::path::PathBuf;
 use vibrato::dictionary::LexType;
 use vibrato::{Dictionary, Tokenizer};
 
 pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
-    let file: File = File::open("src/dictionaries/system.dic")?;
+    let system_dic_path: PathBuf = match dirs::config_dir() {
+        Some(path) => path.join("popup_dictionary/dicts/system.dic"),
+        None => Err("No valid config path found in environment variables.")?,
+    };
+    let file: File = File::open(system_dic_path)?;
     let reader: BufReader<File> = BufReader::new(file);
     let dict: Dictionary = Dictionary::read(reader)?;
 
