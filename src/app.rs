@@ -1,5 +1,5 @@
 use crate::{
-    dictionary::{Dictionary, Furigana},
+    dictionary::{Dictionary, DictionaryEntry, DictionaryTerm, Furigana},
     tokenizer::ParsedWord,
 };
 use eframe::{
@@ -44,6 +44,113 @@ impl MyApp {
             words: words.to_vec(),
             selected: 0,
             dictionary: dictionary.clone(),
+        }
+    }
+
+    fn display_terms_prioritized(&self, ui: &mut Ui, entry: &DictionaryEntry) {
+        /*
+        Display terms in this priority:
+        1. no kanji, same as surface        -- first
+        2. no kanji, same as base
+        3. has kanji, same as surface
+        4. has kanji, same as base
+        5. rest                             -- last
+        */
+
+        let mut terms_to_display: Vec<DictionaryTerm> = entry.terms.clone();
+        let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
+        terms_to_display.retain_mut(|term| {
+            if term.term.is_empty() && term.reading == self.words[self.selected].surface {
+                filtered_terms.push(term.clone());
+                false
+            } else {
+                true
+            }
+        });
+        Self::display_terms(ui, &filtered_terms);
+        filtered_terms.clear();
+        terms_to_display.retain_mut(|term| {
+            if term.term.is_empty() && term.reading == self.words[self.selected].base {
+                filtered_terms.push(term.clone());
+                false
+            } else {
+                true
+            }
+        });
+        Self::display_terms(ui, &filtered_terms);
+        filtered_terms.clear();
+        terms_to_display.retain_mut(|term| {
+            if !term.term.is_empty() && term.reading == self.words[self.selected].surface {
+                filtered_terms.push(term.clone());
+                false
+            } else {
+                true
+            }
+        });
+        Self::display_terms(ui, &filtered_terms);
+        filtered_terms.clear();
+        terms_to_display.retain_mut(|term| {
+            if !term.term.is_empty() && term.reading == self.words[self.selected].base {
+                filtered_terms.push(term.clone());
+                false
+            } else {
+                true
+            }
+        });
+        Self::display_terms(ui, &filtered_terms);
+        Self::display_terms(ui, &terms_to_display);
+    }
+
+    fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
+        for dictionary_term in terms {
+            ui.horizontal(|ui| {
+                if !dictionary_term.term.is_empty() {
+                    if let Some(furigana_vec) = &dictionary_term.furigana {
+                        Self::display_furigana(ui, furigana_vec);
+                    } else {
+                        let furigana: Vec<Furigana> = vec![Furigana {
+                            ruby: dictionary_term.term.to_string(),
+                            rt: Some(dictionary_term.reading.to_string()),
+                        }];
+                        Self::display_furigana(ui, &furigana);
+                    }
+                } else {
+                    ui.label(
+                        RichText::new(&dictionary_term.reading)
+                            .size(22.0)
+                            .color(Color32::WHITE),
+                    );
+                }
+
+                /*
+                if let Some(frequency) = dictionary_term.frequency {
+                    ui.label(
+                        RichText::new(format!("freq:{}", frequency))
+                            .size(12.0)
+                            .color(Color32::WHITE),
+                    );
+                }*/
+            });
+
+            let mut count: u32 = 1;
+            for meaning in &dictionary_term.meanings {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("{}.", count))
+                            .size(18.0)
+                            .color(Color32::GRAY),
+                    );
+                    ui.label(
+                        RichText::new(format!("{}", meaning))
+                            .size(18.0)
+                            .color(Color32::WHITE),
+                    );
+                });
+
+                count += 1;
+            }
+
+            ui.separator();
         }
     }
 
@@ -153,62 +260,53 @@ impl eframe::App for MyApp {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
+                    /*
+                    Lookup in database in this order until exists:
+                    1. base                                     -- first
+                    2. surface
+                    3. base minus last letter (e.g. 素敵な)
+                    4. surface minus last letter                -- last
+                    */
                     if let Some(dictionary_entry) = self
                         .dictionary
                         .lookup(&self.words[self.selected].base)
                         .expect(&format!(
-                            "Could not find {}",
+                            "Error getting from database when looking up base: {}",
                             &self.words[self.selected].base
                         ))
                     {
-                        for dictionary_term in &dictionary_entry.terms {
-                            ui.horizontal(|ui| {
-                                if !dictionary_term.term.is_empty() {
-                                    if let Some(furigana_vec) = &dictionary_term.furigana {
-                                        Self::display_furigana(ui, furigana_vec);
-                                    } else {
-                                        let furigana: Vec<Furigana> = vec![Furigana {
-                                            ruby: dictionary_term.term.to_string(),
-                                            rt: Some(dictionary_term.reading.to_string()),
-                                        }];
-                                        Self::display_furigana(ui, &furigana);
-                                    }
-                                } else {
-                                    ui.label(
-                                        RichText::new(&dictionary_term.reading)
-                                            .size(22.0)
-                                            .color(Color32::WHITE),
-                                    );
-                                }
-
-                                if let Some(frequency) = dictionary_term.frequency {
-                                    ui.label(
-                                        RichText::new(format!("freq:{}", frequency))
-                                            .size(12.0)
-                                            .color(Color32::WHITE),
-                                    );
-                                }
-                            });
-
-                            let mut count: u32 = 1;
-                            for meaning in &dictionary_term.meanings {
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new(format!("{}.", count))
-                                            .size(18.0)
-                                            .color(Color32::GRAY),
-                                    );
-                                    ui.label(
-                                        RichText::new(format!("{}", meaning))
-                                            .size(18.0)
-                                            .color(Color32::WHITE),
-                                    );
-                                });
-
-                                count += 1;
+                        self.display_terms_prioritized(ui, &dictionary_entry);
+                    } else if let Some(dictionary_entry) = self
+                        .dictionary
+                        .lookup(&self.words[self.selected].surface)
+                        .expect(&format!(
+                            "Error getting from database when looking up surface: {}",
+                            &self.words[self.selected].surface
+                        ))
+                    {
+                        self.display_terms_prioritized(ui, &dictionary_entry);
+                    } else {
+                        let mut base_minus_one: String = self.words[self.selected].base.clone();
+                        _ = base_minus_one.pop();
+                        if let Some(dictionary_entry) =
+                            self.dictionary.lookup(&base_minus_one).expect(&format!(
+                                "Error getting from database when looking up base-1: {}",
+                                &base_minus_one
+                            ))
+                        {
+                            self.display_terms_prioritized(ui, &dictionary_entry);
+                        } else {
+                            let mut surface_minus_one: String =
+                                self.words[self.selected].surface.clone();
+                            _ = surface_minus_one.pop();
+                            if let Some(dictionary_entry) =
+                                self.dictionary.lookup(&surface_minus_one).expect(&format!(
+                                    "Error getting from database when looking up surface-1: {}",
+                                    &surface_minus_one
+                                ))
+                            {
+                                self.display_terms_prioritized(ui, &dictionary_entry);
                             }
-
-                            ui.separator();
                         }
                     }
 
