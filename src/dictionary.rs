@@ -24,7 +24,14 @@ pub struct DictionaryTerm {
     pub term: String,
     pub reading: String,
     pub furigana: Option<Vec<Furigana>>,
-    pub meanings: Vec<String>,
+    pub meanings: Vec<DictionaryMeaning>,
+}
+
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
+pub struct DictionaryMeaning {
+    pub tags: Vec<String>,
+    pub info: Vec<String>,
+    pub gloss: Vec<String>,
 }
 
 // JMDict json
@@ -56,6 +63,9 @@ struct Kana {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Sense {
+    partOfSpeech: Vec<String>,
+    misc: Vec<String>,
+    info: Vec<String>,
     appliesToKanji: Vec<String>,
     appliesToKana: Vec<String>,
     gloss: Vec<Gloss>,
@@ -111,15 +121,17 @@ impl Dictionary {
                         kana.appliesToKanji.contains(&wildcard)
                             || kana.appliesToKanji.contains(&kanji.text)
                     }) {
-                        let meanings: Vec<String> = word
-                            .sense
-                            .iter()
-                            .filter(|sense| {
-                                sense.appliesToKanji.contains(&wildcard)
-                                    || sense.appliesToKanji.contains(&kanji.text)
-                            })
-                            .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
-                            .collect();
+                        let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
+                            &word
+                                .sense
+                                .iter()
+                                .filter(|sense| {
+                                    sense.appliesToKanji.contains(&wildcard)
+                                        || sense.appliesToKanji.contains(&kanji.text)
+                                })
+                                .collect::<Vec<&Sense>>(),
+                            &jmdict.tags,
+                        );
 
                         let mut frequency = frequency_map.get(&kanji.text);
                         if frequency.is_none() {
@@ -158,15 +170,17 @@ impl Dictionary {
                     .iter()
                     .filter(|kana| kana.appliesToKanji.is_empty())
                 {
-                    let meanings: Vec<String> = word
-                        .sense
-                        .iter()
-                        .filter(|sense| {
-                            sense.appliesToKana.contains(&wildcard)
-                                || sense.appliesToKana.contains(&kana.text)
-                        })
-                        .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
-                        .collect();
+                    let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
+                        &word
+                            .sense
+                            .iter()
+                            .filter(|sense| {
+                                sense.appliesToKana.contains(&wildcard)
+                                    || sense.appliesToKana.contains(&kana.text)
+                            })
+                            .collect::<Vec<&Sense>>(),
+                        &jmdict.tags,
+                    );
 
                     Self::insert_entry(
                         db,
@@ -181,15 +195,17 @@ impl Dictionary {
                 }
             } else {
                 for kana in &word.kana {
-                    let meanings: Vec<String> = word
-                        .sense
-                        .iter()
-                        .filter(|sense| {
-                            sense.appliesToKana.contains(&wildcard)
-                                || sense.appliesToKana.contains(&kana.text)
-                        })
-                        .flat_map(|sense| sense.gloss.iter().map(|gloss| gloss.text.clone()))
-                        .collect();
+                    let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
+                        &word
+                            .sense
+                            .iter()
+                            .filter(|sense| {
+                                sense.appliesToKana.contains(&wildcard)
+                                    || sense.appliesToKana.contains(&kana.text)
+                            })
+                            .collect::<Vec<&Sense>>(),
+                        &jmdict.tags,
+                    );
 
                     Self::insert_entry(
                         db,
@@ -248,6 +264,46 @@ impl Dictionary {
         Ok(furigana_map)
     }
 
+    fn build_meanings(
+        senses: &Vec<&Sense>,
+        tags: &HashMap<String, String>,
+    ) -> Vec<DictionaryMeaning> {
+        let mut meanings: Vec<DictionaryMeaning> = Vec::new();
+
+        for sense in senses {
+            let meaning_tags: Vec<String> = sense
+                .partOfSpeech
+                .iter()
+                .filter_map(|part| tags.get(part))
+                .cloned()
+                .collect();
+
+            let mut info: Vec<String> = sense.info.to_vec();
+            info.extend_from_slice(
+                &sense
+                    .misc
+                    .iter()
+                    .filter_map(|misc| tags.get(misc))
+                    .cloned()
+                    .collect::<Vec<String>>(),
+            );
+
+            let dict_meaning: DictionaryMeaning = DictionaryMeaning {
+                tags: meaning_tags,
+                info,
+                gloss: sense
+                    .gloss
+                    .iter()
+                    .map(|gloss| gloss.text.to_string())
+                    .collect(),
+            };
+
+            meanings.push(dict_meaning);
+        }
+
+        meanings
+    }
+
     fn insert_entry(
         db: &Db,
         key: &str,
@@ -256,7 +312,7 @@ impl Dictionary {
         term: &str,
         reading: &str,
         furigana: &Option<&Vec<Furigana>>,
-        meanings: &Vec<String>,
+        meanings: &Vec<DictionaryMeaning>,
     ) -> Result<(), Box<dyn Error>> {
         let frequency: Option<u32> = match frequency {
             Some(freq_value) => Some(**freq_value),

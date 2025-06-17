@@ -133,24 +133,79 @@ impl MyApp {
             });
 
             let mut count: u32 = 1;
+            let mut last_tags: String = String::new();
             for meaning in &dictionary_term.meanings {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(format!("{}.", count))
-                            .size(18.0)
-                            .color(Color32::GRAY),
-                    );
-                    ui.label(
-                        RichText::new(format!("{}", meaning))
-                            .size(18.0)
-                            .color(Color32::WHITE),
+                let mut tags: String = meaning.tags.join(", ");
+                if tags == last_tags {
+                    tags = String::from("-");
+                } else {
+                    last_tags = tags.clone();
+                    if count > 1 {
+                        ui.add_space(16.0);
+                    }
+                }
+
+                ui.columns(2, |columns| {
+                    columns[0].set_height(20.0);
+                    columns[0].horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(format!("{}.", count))
+                                .size(18.0)
+                                .color(Color32::GRAY),
+                        );
+                        ui.label(
+                            RichText::new(format!("{}", meaning.gloss.join(", ")))
+                                .size(18.0)
+                                .color(Color32::WHITE),
+                        );
+                    });
+
+                    columns[1].set_height(20.0);
+                    columns[1].with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add_space(20.0);
+                                ui.label(
+                                    RichText::new(format!("{}", tags))
+                                        .size(14.0)
+                                        .color(Color32::GRAY),
+                                );
+                            });
+                        },
                     );
                 });
+                if meaning.info.len() > 0 {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.horizontal_top(|ui| {
+                            ui.label(
+                                RichText::new(format!("{}.", count))
+                                    .size(18.0)
+                                    .color(Color32::TRANSPARENT),
+                            );
+                            ui.label(
+                                RichText::new(format!("{}", meaning.info.join(", ")))
+                                    .size(12.0)
+                                    .color(Color32::GRAY),
+                            );
+                        });
+                    });
+                }
 
                 count += 1;
             }
 
-            ui.separator();
+            ui.add_space(10.0);
+            ui.scope(|ui| {
+                ui.style_mut()
+                    .visuals
+                    .widgets
+                    .noninteractive
+                    .bg_stroke
+                    .color = Color32::from_rgba_premultiplied(20, 20, 20, 20);
+                ui.separator();
+            });
+            ui.add_space(10.0);
         }
     }
 
@@ -230,7 +285,7 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Sentence:");
+            //ui.heading("Search:");
             ui.horizontal_wrapped(|ui| {
                 for (index, word) in self.words.iter().enumerate() {
                     let mut label_text = RichText::new(format!("{}", word.surface)).size(20.0);
