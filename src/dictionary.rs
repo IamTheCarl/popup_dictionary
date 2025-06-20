@@ -101,6 +101,54 @@ impl Dictionary {
         Ok(Self { db })
     }
 
+    const GENERIC_TAGS: phf::Map<&'static str, &'static str> = phf::phf_map! {
+        "?" => "unclassified",
+        "noun" => "noun (common) (futsuumeishi)",
+        "expr" => "expression (phrases, clauses, etc.)",
+        "na-adj" => "adjectival noun or quasi-adjective (keiyodoshi)",
+        "no-adj" =>"noun which may take the genitive case particle 'no'",
+        "i-adj" => "adjective (keiyoushi)",
+        "godan" => "godan verb",
+        "trans" => "transitive verb",
+        "pronoun" => "pronoun",
+        "adverb" => "adverb (fukushi)",
+        "to-adverb" => "adverb taking the 'to' particle",
+        "suru" => "noun or participle which takes the aux. verb suru",
+        "pre-noun" => "pre-noun adjectival (rentaishi)",
+        "inter" => "interjection (kandoushi)",
+        "ichidan" => "ichidan verb",
+        "intrans" => "intransitive verb",
+        "aux-verb" => "auxiliary verb",
+        "pre-adj" => "noun or verb acting prenominally",
+        "conjunc" => "conjunction",
+        "particle" => "particle",
+        "suffix" => "suffix",
+        "taru-adj" => "'taru' adjective",
+        "auxil" => "auxiliary",
+        "copula" => "copula",
+        "prefix" => "prefix",
+        "kuru-verb" => "kuru verb - special class",
+        "aux-adj" => "auxiliary adjective",
+        "counter" => "counter",
+        "numeric" => "numeric",
+        "shiku-adj" => "'shiku' adjective (archaic)",
+        "nidan-l" => "nidan verb (lower class) (archaic)",
+        "su-verb" => "su verb - precursor to modern suru",
+        "irregular" => "irregular verb",
+        "ku-adj" => "'ku' adjective (archaic)",
+        "nidan-u" => "nidan verb (upper class) (archaic)",
+        "nidan" => "nidan verb (archaic)",
+        "yodan" => "yodan verb (archaic)",
+        "nari-adj" => "archaic/formal form of na-adjective",
+    };
+
+    pub fn get_tag(tag: &str) -> &str {
+        match Self::GENERIC_TAGS.get(tag) {
+            Some(description) => description,
+            None => "unknown",
+        }
+    }
+
     fn parse_jmdict_simplified(db: &Db) -> Result<(), Box<dyn Error>> {
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
@@ -271,12 +319,14 @@ impl Dictionary {
         let mut meanings: Vec<DictionaryMeaning> = Vec::new();
 
         for sense in senses {
-            let meaning_tags: Vec<String> = sense
-                .partOfSpeech
-                .iter()
-                .filter_map(|part| tags.get(part))
-                .cloned()
-                .collect();
+            let mut meaning_tags: Vec<String> = Vec::new();
+            for part in &sense.partOfSpeech {
+                if let Some(generic_tag) = Self::JMDICT_GENERIC_MAPPING.get(part) {
+                    meaning_tags.push(generic_tag.to_string());
+                } else {
+                    println!("No generic tag found for jmdict tag: {}", part);
+                }
+            }
 
             let mut info: Vec<String> = sense.info.to_vec();
             info.extend_from_slice(
@@ -537,4 +587,89 @@ impl Dictionary {
         }
         Ok(None)
     }
+
+    const JMDICT_GENERIC_MAPPING: phf::Map<&'static str, &'static str> = phf::phf_map! {
+        "unc" => "?",
+        "n" => "noun",
+        "exp" => "expr",
+        "adj-na" => "na-adj",
+        "adj-no" => "no-adj",
+        "adj-i" => "i-adj",
+        "v5u" => "godan",
+        "vt" => "trans",
+        "pn" => "pronoun",
+        "adv" => "adverb",
+        "adv-to" => "to-adverb",
+        "vs" => "suru",
+        "adj-pn" => "pre-noun",
+        "int" => "inter",
+        "v1" => "ichidan",
+        "vi" => "intrans",
+        "v5s" => "godan",
+        "v5k" => "godan",
+        "v5r" => "godan",
+        "v5aru" => "godan",
+        "aux-v" => "aux-verb",
+        "adj-f" => "pre-adj",
+        "conj" => "conjunc",
+        "prt" => "particle",
+        "v5m" => "godan",
+        "n-suf" => "suffix",
+        "v5g" => "godan",
+        "v5r-i" => "godan",
+        "suf" => "suffix",
+        "vs-i" => "suru",
+        "adj-t" => "taru-adj",
+        "adj-ix" => "i-adj",
+        "aux" => "auxil",
+        "cop" => "copula",
+        "pref" => "prefix",
+        "vk" => "kuru-verb",
+        "aux-adj" => "aux-adj",
+        "n-pref" => "prefix",
+        "ctr" => "counter",
+        "num" => "numeric",
+        "vs-s" => "suru",
+        "adj-shiku" => "shiku-adj",
+        "v5t" => "godan",
+        "v5b" => "godan",
+        "v5k-s" => "godan",
+        "vz" => "ichidan",
+        "v2m-s" => "nidan-l",
+        "vs-c" => "su-verb",
+        "v1-s" => "ichidan",
+        "v5n" => "godan",
+        "vn" => "irregular",
+        "adj-ku" => "ku-adj",
+        "v2h-k" => "nidan-u",
+        "v2a-s" => "nidan",
+        "v4m" => "yodan",
+        "v2r-k" => "nidan-u",
+        "v4r" => "yodan",
+        "v2r-s" => "nidan-l",
+        "v5u-s" => "godan",
+        "vr" => "irregular",
+        "v4s" => "yodan",
+        "adj-nari" => "nari-adj",
+        "v4k" => "yodan",
+        "v2k-s" => "nidan-l",
+        "v2t-k" => "nidan-u",
+        "v4h" => "yodan",
+        "v4t" => "yodan",
+        "v4g" => "yodan",
+        "v2h-s" => "nidan-l",
+        "v2g-s" => "nidan-l",
+        "v4b" => "yodan",
+        "v2y-s" => "nidan-l",
+        "v2d-s" => "nidan-l",
+        "v2y-k" => "nidan-u",
+        "v2k-k" => "nidan-u",
+        "v2g-k" => "nidan-u",
+        "v2b-k" => "nidan-u",
+        "v2s-s" => "nidan-l",
+        "v2z-s" => "nidan-l",
+        "v2t-s" => "nidan-l",
+        "v2n-s" => "nidan-l",
+        "v2w-s" => "nidan-l",
+    };
 }

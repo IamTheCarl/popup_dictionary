@@ -13,3 +13,4 @@ vibrato = "0.5.2"
 sled = "0.34.7"
 bincode = "2.0.1"
 dirs = "6.0.0"
+phf = { version = "0.12.1", features = ["macros"] }
