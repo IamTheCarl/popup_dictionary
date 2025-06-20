@@ -103,36 +103,25 @@ impl MyApp {
 
     fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
         for dictionary_term in terms {
-            ui.horizontal(|ui| {
-                if !dictionary_term.term.is_empty() {
-                    if let Some(furigana_vec) = &dictionary_term.furigana {
-                        Self::display_furigana(ui, furigana_vec);
-                    } else {
-                        let furigana: Vec<Furigana> = vec![Furigana {
-                            ruby: dictionary_term.term.to_string(),
-                            rt: Some(dictionary_term.reading.to_string()),
-                        }];
-                        Self::display_furigana(ui, &furigana);
-                    }
+            if !dictionary_term.term.is_empty() {
+                if let Some(furigana_vec) = &dictionary_term.furigana {
+                    Self::display_furigana(ui, furigana_vec);
                 } else {
-                    ui.label(
-                        RichText::new(&dictionary_term.reading)
-                            .size(22.0)
-                            .color(Color32::WHITE),
-                    );
+                    let furigana: Vec<Furigana> = vec![Furigana {
+                        ruby: dictionary_term.term.to_string(),
+                        rt: Some(dictionary_term.reading.to_string()),
+                    }];
+                    Self::display_furigana(ui, &furigana);
                 }
+            } else {
+                ui.label(
+                    RichText::new(&dictionary_term.reading)
+                        .size(22.0)
+                        .color(Color32::WHITE),
+                );
+            }
 
-                /*
-                if let Some(frequency) = dictionary_term.frequency {
-                    ui.label(
-                        RichText::new(format!("freq:{}", frequency))
-                            .size(12.0)
-                            .color(Color32::WHITE),
-                    );
-                }*/
-            });
-
-            let mut count: u32 = 1;
+            let mut count: u32 = 0;
             let mut last_tags: String = String::new();
             for meaning in &dictionary_term.meanings {
                 let mut tags: String = meaning.tags.join(", ");
@@ -140,39 +129,27 @@ impl MyApp {
                     tags = String::from("-");
                 } else {
                     last_tags = tags.clone();
-                    if count > 1 {
-                        ui.add_space(16.0);
+                    if count > 0 {
+                        ui.add_space(12.0);
+                        count = 1;
                     }
+                    ui.add_space(4.0);
+                    Self::display_tags(ui, &meaning.tags);
+                }
+                if count == 0 {
+                    count = 1;
                 }
 
-                ui.columns(2, |columns| {
-                    columns[0].set_height(20.0);
-                    columns[0].horizontal_wrapped(|ui| {
-                        ui.label(
-                            RichText::new(format!("{}.", count))
-                                .size(18.0)
-                                .color(Color32::GRAY),
-                        );
-                        ui.label(
-                            RichText::new(format!("{}", meaning.gloss.join(", ")))
-                                .size(18.0)
-                                .color(Color32::WHITE),
-                        );
-                    });
-
-                    columns[1].set_height(20.0);
-                    columns[1].with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.add_space(20.0);
-                                ui.label(
-                                    RichText::new(format!("{}", tags))
-                                        .size(14.0)
-                                        .color(Color32::GRAY),
-                                );
-                            });
-                        },
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(format!("{}.", count))
+                            .size(18.0)
+                            .color(Color32::GRAY),
+                    );
+                    ui.label(
+                        RichText::new(format!("{}", meaning.gloss.join(", ")))
+                            .size(18.0)
+                            .color(Color32::WHITE),
                     );
                 });
                 if meaning.info.len() > 0 {
@@ -207,6 +184,47 @@ impl MyApp {
             });
             ui.add_space(10.0);
         }
+    }
+
+    fn display_tags(ui: &mut Ui, tags: &Vec<String>) {
+        ui.horizontal_wrapped(|ui| {
+            for tag in tags {
+                Self::display_tag(ui, tag);
+            }
+        });
+    }
+
+    fn display_tag(ui: &mut Ui, tag: &str) {
+        let text_color: Color32 = Color32::WHITE;
+
+        let text_galley = ui.fonts(|f| {
+            f.layout_no_wrap(
+                tag.to_string(),
+                egui::FontId::proportional(14.0),
+                Color32::WHITE,
+            )
+        });
+
+        let padding = egui::Vec2::new(4.0, 0.0);
+        let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
+        let response = ui
+            .allocate_rect(rect, egui::Sense::hover())
+            .on_hover_text(Dictionary::get_tag(tag));
+
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
+        }
+
+        ui.painter()
+            .rect_filled(rect, egui::Rounding::same(4), Color32::from_rgb(50, 50, 50));
+
+        ui.painter().galley(
+            (rect.center() - text_galley.size() / 2.0) - egui::Vec2::new(0.0, 2.0),
+            text_galley,
+            Color32::WHITE,
+        );
+
+        //ui.allocate_space(rect.size());
     }
 
     fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>) {
