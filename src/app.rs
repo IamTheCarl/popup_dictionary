@@ -153,15 +153,15 @@ impl MyApp {
                     );
                 });
                 if meaning.info.len() > 0 {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.horizontal_top(|ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.label(
+                            RichText::new(format!("{}.", count))
+                                .size(18.0)
+                                .color(Color32::TRANSPARENT),
+                        );
+                        ui.horizontal_wrapped(|ui| {
                             ui.label(
-                                RichText::new(format!("{}.", count))
-                                    .size(18.0)
-                                    .color(Color32::TRANSPARENT),
-                            );
-                            ui.label(
-                                RichText::new(format!("{}", meaning.info.join(", ")))
+                                RichText::new(format!("{}", meaning.info.join("; ")))
                                     .size(12.0)
                                     .color(Color32::GRAY),
                             );
@@ -173,15 +173,20 @@ impl MyApp {
             }
 
             ui.add_space(10.0);
-            ui.scope(|ui| {
-                ui.style_mut()
-                    .visuals
-                    .widgets
-                    .noninteractive
-                    .bg_stroke
-                    .color = Color32::from_rgba_premultiplied(20, 20, 20, 20);
-                ui.separator();
+
+            let percent: f32 = 0.8;
+            let width: f32 = ui.available_width() * percent;
+            let margin: f32 = (ui.available_width() - width) / 2.0;
+
+            ui.horizontal(|ui| {
+                ui.add_space(margin);
+                let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
+                ui.painter().line_segment(
+                    [rect.left_center(), rect.right_center()],
+                    egui::Stroke::new(1.0, Color32::from_rgba_premultiplied(20, 20, 20, 20)),
+                );
             });
+
             ui.add_space(10.0);
         }
     }
@@ -303,7 +308,6 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            //ui.heading("Search:");
             ui.horizontal_wrapped(|ui| {
                 for (index, word) in self.words.iter().enumerate() {
                     let mut label_text = RichText::new(format!("{}", word.surface)).size(20.0);
@@ -327,64 +331,77 @@ impl eframe::App for MyApp {
                 }
             });
 
-            ui.add_space(10.0);
-            ui.heading("Definition:");
+            ui.add_space(40.0);
+            ui.scope(|ui| {
+                ui.style_mut()
+                    .visuals
+                    .widgets
+                    .noninteractive
+                    .bg_stroke
+                    .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
+                ui.separator();
+            });
+            //ui.heading(RichText::new("Definition:").color(Color32::WHITE));
 
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    /*
-                    Lookup in database in this order until exists:
-                    1. base                                     -- first
-                    2. surface
-                    3. base minus last letter (e.g. 素敵な)
-                    4. surface minus last letter                -- last
-                    */
-                    if let Some(dictionary_entry) = self
-                        .dictionary
-                        .lookup(&self.words[self.selected].base)
-                        .expect(&format!(
-                            "Error getting from database when looking up base: {}",
-                            &self.words[self.selected].base
-                        ))
-                    {
-                        self.display_terms_prioritized(ui, &dictionary_entry);
-                    } else if let Some(dictionary_entry) = self
-                        .dictionary
-                        .lookup(&self.words[self.selected].surface)
-                        .expect(&format!(
-                            "Error getting from database when looking up surface: {}",
-                            &self.words[self.selected].surface
-                        ))
-                    {
-                        self.display_terms_prioritized(ui, &dictionary_entry);
-                    } else {
-                        let mut base_minus_one: String = self.words[self.selected].base.clone();
-                        _ = base_minus_one.pop();
-                        if let Some(dictionary_entry) =
-                            self.dictionary.lookup(&base_minus_one).expect(&format!(
-                                "Error getting from database when looking up base-1: {}",
-                                &base_minus_one
+            ui.style_mut().visuals.indent_has_left_vline = false;
+            ui.style_mut().spacing.indent = 4.0;
+            ui.indent("scroll_indent", |ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        /*
+                        Lookup in database in this order until exists:
+                        1. base                                     -- first
+                        2. surface
+                        3. base minus last letter (e.g. 素敵な)
+                        4. surface minus last letter                -- last
+                        */
+                        if let Some(dictionary_entry) = self
+                            .dictionary
+                            .lookup(&self.words[self.selected].base)
+                            .expect(&format!(
+                                "Error getting from database when looking up base: {}",
+                                &self.words[self.selected].base
+                            ))
+                        {
+                            self.display_terms_prioritized(ui, &dictionary_entry);
+                        } else if let Some(dictionary_entry) = self
+                            .dictionary
+                            .lookup(&self.words[self.selected].surface)
+                            .expect(&format!(
+                                "Error getting from database when looking up surface: {}",
+                                &self.words[self.selected].surface
                             ))
                         {
                             self.display_terms_prioritized(ui, &dictionary_entry);
                         } else {
-                            let mut surface_minus_one: String =
-                                self.words[self.selected].surface.clone();
-                            _ = surface_minus_one.pop();
+                            let mut base_minus_one: String = self.words[self.selected].base.clone();
+                            _ = base_minus_one.pop();
                             if let Some(dictionary_entry) =
-                                self.dictionary.lookup(&surface_minus_one).expect(&format!(
-                                    "Error getting from database when looking up surface-1: {}",
-                                    &surface_minus_one
+                                self.dictionary.lookup(&base_minus_one).expect(&format!(
+                                    "Error getting from database when looking up base-1: {}",
+                                    &base_minus_one
                                 ))
                             {
                                 self.display_terms_prioritized(ui, &dictionary_entry);
+                            } else {
+                                let mut surface_minus_one: String =
+                                    self.words[self.selected].surface.clone();
+                                _ = surface_minus_one.pop();
+                                if let Some(dictionary_entry) =
+                                    self.dictionary.lookup(&surface_minus_one).expect(&format!(
+                                        "Error getting from database when looking up surface-1: {}",
+                                        &surface_minus_one
+                                    ))
+                                {
+                                    self.display_terms_prioritized(ui, &dictionary_entry);
+                                }
                             }
                         }
-                    }
 
-                    ui.add_space(40.0);
-                });
+                        ui.add_space(40.0);
+                    });
+            });
         });
         egui::TopBottomPanel::bottom("footer")
             .min_height(40.0)
