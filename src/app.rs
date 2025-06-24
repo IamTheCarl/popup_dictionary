@@ -206,7 +206,7 @@ impl MyApp {
             f.layout_no_wrap(
                 tag.to_string(),
                 egui::FontId::proportional(14.0),
-                Color32::WHITE,
+                text_color,
             )
         });
 
@@ -220,13 +220,16 @@ impl MyApp {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
         }
 
-        ui.painter()
-            .rect_filled(rect, egui::Rounding::same(4), Color32::from_rgb(50, 50, 50));
+        ui.painter().rect_filled(
+            rect,
+            egui::CornerRadius::same(4),
+            Color32::from_rgb(50, 50, 50),
+        );
 
         ui.painter().galley(
             (rect.center() - text_galley.size() / 2.0) - egui::Vec2::new(0.0, 2.0),
             text_galley,
-            Color32::WHITE,
+            text_color,
         );
 
         //ui.allocate_space(rect.size());
@@ -310,19 +313,46 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for (index, word) in self.words.iter().enumerate() {
-                    let mut label_text = RichText::new(format!("{}", word.surface)).size(20.0);
+                    let font_size: f32 = 20.0;
+                    let mut label_text: RichText =
+                        RichText::new(format!("{}", word.surface)).size(font_size);
                     if word.is_valid() {
                         label_text = label_text.underline();
                         if index == self.selected {
                             label_text = label_text.color(Color32::WHITE);
                         }
-                        let label = ui
-                            .label(label_text.clone())
-                            .on_hover_cursor(egui::CursorIcon::PointingHand);
-                        if label.hovered() {
-                            label.clone().highlight();
+
+                        let text_size: egui::Vec2 = {
+                            let temp_galley = ui.fonts(|f| {
+                                f.layout_no_wrap(
+                                    label_text.text().to_string(),
+                                    egui::FontId::proportional(font_size),
+                                    Color32::PLACEHOLDER,
+                                )
+                            });
+                            temp_galley.size()
+                        };
+                        let (background_rect, _) =
+                            ui.allocate_exact_size(text_size, egui::Sense::hover());
+                        let label_rect =
+                            egui::Rect::from_center_size(background_rect.center(), text_size);
+
+                        let response = ui
+                            .allocate_new_ui(egui::UiBuilder::new().max_rect(label_rect), |ui| {
+                                ui.label(label_text)
+                            })
+                            .inner;
+                        if response.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
-                        if label.clicked() {
+                        if response.hovered() {
+                            ui.painter().rect_filled(
+                                background_rect,
+                                egui::CornerRadius::same(4),
+                                Color32::from_rgba_premultiplied(40, 40, 40, 40),
+                            );
+                        }
+                        if response.clicked() {
                             self.selected = index;
                         }
                     } else {
