@@ -124,10 +124,8 @@ impl MyApp {
             let mut count: u32 = 0;
             let mut last_tags: String = String::new();
             for meaning in &dictionary_term.meanings {
-                let mut tags: String = meaning.tags.join(", ");
-                if tags == last_tags {
-                    tags = String::from("-");
-                } else {
+                let tags: String = meaning.tags.join("");
+                if tags != last_tags {
                     last_tags = tags.clone();
                     if count > 0 {
                         ui.add_space(12.0);

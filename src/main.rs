@@ -10,12 +10,11 @@ fn main() {
 
     if args.len() > 0 {
         if args.len() > 1 {
-            let mut query: String = String::new();
-            if args[0] == "-ocr" || args[0] == "-ocrv" {
-                query = args[1..].join("");
+            let query = if args[0] == "-ocr" || args[0] == "-ocrv" {
+                args[1..].join("")
             } else {
-                query = args.join("");
-            }
+                args.join("")
+            };
             if let Err(e) = popup_dictionary::run(&query) {
                 eprintln!("Error: {e}");
                 process::exit(1);
@@ -34,8 +33,8 @@ fn main() {
                     .output()
                     .expect("failed to execute linux copy");
                 println!("status: {}", output.status);
-                io::stdout().write_all(&output.stdout);
-                io::stderr().write_all(&output.stderr);
+                io::stdout().write_all(&output.stdout).unwrap();
+                io::stderr().write_all(&output.stderr).unwrap();
             } else if args[0] == "-ocrv" {
                 let linux_copy_path: PathBuf = match dirs::config_dir() {
                     Some(path) => path.join("popup_dictionary/linux_ocrv.sh"),
@@ -49,8 +48,8 @@ fn main() {
                     .output()
                     .expect("failed to execute linux copy");
                 println!("status: {}", output.status);
-                io::stdout().write_all(&output.stdout);
-                io::stderr().write_all(&output.stderr);
+                io::stdout().write_all(&output.stdout).unwrap();
+                io::stderr().write_all(&output.stderr).unwrap();
             } else {
                 let query: String = args.join("");
                 if let Err(e) = popup_dictionary::run(&query) {
@@ -75,8 +74,8 @@ fn main() {
                 .output()
                 .expect("failed to execute linux copy");
             println!("status: {}", output.status);
-            io::stdout().write_all(&output.stdout);
-            io::stderr().write_all(&output.stderr);
+            io::stdout().write_all(&output.stdout).unwrap();
+            io::stderr().write_all(&output.stderr).unwrap();
         }
     }
 }

@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct Dictionary {
@@ -57,19 +56,21 @@ struct Kanji {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct Kana {
     common: bool,
     text: String,
-    appliesToKanji: Vec<String>,
+    applies_to_kanji: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct Sense {
-    partOfSpeech: Vec<String>,
+    part_of_speech: Vec<String>,
     misc: Vec<String>,
     info: Vec<String>,
-    appliesToKanji: Vec<String>,
-    appliesToKana: Vec<String>,
+    applies_to_kanji: Vec<String>,
+    applies_to_kana: Vec<String>,
     gloss: Vec<Gloss>,
 }
 
@@ -169,16 +170,16 @@ impl Dictionary {
             if !word.kanji.is_empty() {
                 for kanji in &word.kanji {
                     for kana in word.kana.iter().filter(|kana| {
-                        kana.appliesToKanji.contains(&wildcard)
-                            || kana.appliesToKanji.contains(&kanji.text)
+                        kana.applies_to_kanji.contains(&wildcard)
+                            || kana.applies_to_kanji.contains(&kanji.text)
                     }) {
                         let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                             &word
                                 .sense
                                 .iter()
                                 .filter(|sense| {
-                                    sense.appliesToKanji.contains(&wildcard)
-                                        || sense.appliesToKanji.contains(&kanji.text)
+                                    sense.applies_to_kanji.contains(&wildcard)
+                                        || sense.applies_to_kanji.contains(&kanji.text)
                                 })
                                 .collect::<Vec<&Sense>>(),
                             &jmdict.tags,
@@ -221,15 +222,15 @@ impl Dictionary {
                 for kana in word
                     .kana
                     .iter()
-                    .filter(|kana| kana.appliesToKanji.is_empty())
+                    .filter(|kana| kana.applies_to_kanji.is_empty())
                 {
                     let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                         &word
                             .sense
                             .iter()
                             .filter(|sense| {
-                                sense.appliesToKana.contains(&wildcard)
-                                    || sense.appliesToKana.contains(&kana.text)
+                                sense.applies_to_kana.contains(&wildcard)
+                                    || sense.applies_to_kana.contains(&kana.text)
                             })
                             .collect::<Vec<&Sense>>(),
                         &jmdict.tags,
@@ -254,8 +255,8 @@ impl Dictionary {
                             .sense
                             .iter()
                             .filter(|sense| {
-                                sense.appliesToKana.contains(&wildcard)
-                                    || sense.appliesToKana.contains(&kana.text)
+                                sense.applies_to_kana.contains(&wildcard)
+                                    || sense.applies_to_kana.contains(&kana.text)
                             })
                             .collect::<Vec<&Sense>>(),
                         &jmdict.tags,
@@ -327,7 +328,7 @@ impl Dictionary {
 
         for sense in senses {
             let mut meaning_tags: Vec<String> = Vec::new();
-            for part in &sense.partOfSpeech {
+            for part in &sense.part_of_speech {
                 if let Some(generic_tag) = Self::JMDICT_GENERIC_MAPPING.get(part) {
                     meaning_tags.push(generic_tag.to_string());
                 } else {
