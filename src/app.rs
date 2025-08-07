@@ -6,7 +6,7 @@ use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
-use egui::{Color32, RichText, Ui};
+use egui::{Color32, CornerRadius, RichText, Ui};
 
 pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), eframe::Error> {
     // Configure native window options
@@ -308,115 +308,137 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                for (index, word) in self.words.iter().enumerate() {
-                    let font_size: f32 = 20.0;
-                    let mut label_text: RichText =
-                        RichText::new(format!("{}", word.surface)).size(font_size);
-                    if word.is_valid() {
-                        label_text = label_text.underline();
-                        if index == self.selected {
-                            label_text = label_text.color(Color32::WHITE);
-                        }
+        let custom_frame = egui::containers::Frame {
+            corner_radius: CornerRadius::ZERO,
+            fill: Color32::from_rgb(27, 28, 29),
+            inner_margin: egui::Margin {
+                left: 2,
+                right: 2,
+                top: 2,
+                bottom: 2,
+            },
+            outer_margin: egui::Margin {
+                left: 2,
+                right: 2,
+                top: 2,
+                bottom: 2,
+            },
+            shadow: egui::Shadow::NONE,
+            stroke: egui::Stroke::NONE,
+        };
+        egui::CentralPanel::default()
+            .frame(custom_frame)
+            .show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for (index, word) in self.words.iter().enumerate() {
+                        let font_size: f32 = 20.0;
+                        let mut label_text: RichText =
+                            RichText::new(format!("{}", word.surface)).size(font_size);
+                        if word.is_valid() {
+                            label_text = label_text.underline().color(Color32::GRAY);
+                            if index == self.selected {
+                                label_text = label_text.color(Color32::WHITE);
+                            }
 
-                        let text_size: egui::Vec2 = {
-                            let temp_galley = ui.fonts(|f| {
-                                f.layout_no_wrap(
-                                    label_text.text().to_string(),
-                                    egui::FontId::proportional(font_size),
-                                    Color32::PLACEHOLDER,
+                            let text_size: egui::Vec2 = {
+                                let temp_galley = ui.fonts(|f| {
+                                    f.layout_no_wrap(
+                                        label_text.text().to_string(),
+                                        egui::FontId::proportional(font_size),
+                                        Color32::PLACEHOLDER,
+                                    )
+                                });
+                                temp_galley.size()
+                            };
+                            let (background_rect, _) =
+                                ui.allocate_exact_size(text_size, egui::Sense::hover());
+                            let label_rect =
+                                egui::Rect::from_center_size(background_rect.center(), text_size);
+
+                            let response = ui
+                                .allocate_new_ui(
+                                    egui::UiBuilder::new().max_rect(label_rect),
+                                    |ui| ui.label(label_text),
                                 )
-                            });
-                            temp_galley.size()
-                        };
-                        let (background_rect, _) =
-                            ui.allocate_exact_size(text_size, egui::Sense::hover());
-                        let label_rect =
-                            egui::Rect::from_center_size(background_rect.center(), text_size);
-
-                        let response = ui
-                            .allocate_new_ui(egui::UiBuilder::new().max_rect(label_rect), |ui| {
-                                ui.label(label_text)
-                            })
-                            .inner;
-                        if response.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if response.hovered() {
-                            ui.painter().rect_filled(
-                                background_rect,
-                                egui::CornerRadius::same(4),
-                                Color32::from_rgba_premultiplied(40, 40, 40, 40),
-                            );
-                        }
-                        if response.clicked() {
-                            self.selected = index;
-                        }
-                    } else {
-                        ui.label(label_text.clone());
-                    }
-                }
-            });
-
-            ui.add_space(40.0);
-            ui.scope(|ui| {
-                ui.style_mut()
-                    .visuals
-                    .widgets
-                    .noninteractive
-                    .bg_stroke
-                    .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
-                ui.separator();
-            });
-            //ui.heading(RichText::new("Definition:").color(Color32::WHITE));
-
-            ui.style_mut().visuals.indent_has_left_vline = false;
-            ui.style_mut().spacing.indent = 4.0;
-            ui.indent("scroll_indent", |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        /*
-                        Lookup in database in this order until exists:
-                        1. base                                     -- first
-                        2. surface
-                        3. base minus last letter (e.g. 素敵な)
-                        4. surface minus last letter                -- last
-                        */
-                        if let Some(dictionary_entry) = self
-                            .dictionary
-                            .lookup(&self.words[self.selected].base)
-                            .expect(&format!(
-                                "Error getting from database when looking up base: {}",
-                                &self.words[self.selected].base
-                            ))
-                        {
-                            self.display_terms_prioritized(ui, &dictionary_entry);
-                        } else if let Some(dictionary_entry) = self
-                            .dictionary
-                            .lookup(&self.words[self.selected].surface)
-                            .expect(&format!(
-                                "Error getting from database when looking up surface: {}",
-                                &self.words[self.selected].surface
-                            ))
-                        {
-                            self.display_terms_prioritized(ui, &dictionary_entry);
+                                .inner;
+                            if response.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+                            if response.hovered() {
+                                ui.painter().rect_filled(
+                                    background_rect,
+                                    egui::CornerRadius::same(4),
+                                    Color32::from_rgba_premultiplied(40, 40, 40, 40),
+                                );
+                            }
+                            if response.clicked() {
+                                self.selected = index;
+                            }
                         } else {
-                            let mut base_minus_one: String = self.words[self.selected].base.clone();
-                            _ = base_minus_one.pop();
-                            if let Some(dictionary_entry) =
-                                self.dictionary.lookup(&base_minus_one).expect(&format!(
-                                    "Error getting from database when looking up base-1: {}",
-                                    &base_minus_one
+                            ui.label(label_text.clone());
+                        }
+                    }
+                });
+
+                ui.add_space(40.0);
+                ui.scope(|ui| {
+                    ui.style_mut()
+                        .visuals
+                        .widgets
+                        .noninteractive
+                        .bg_stroke
+                        .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
+                    ui.separator();
+                });
+                //ui.heading(RichText::new("Definition:").color(Color32::WHITE));
+
+                ui.style_mut().visuals.indent_has_left_vline = false;
+                ui.style_mut().spacing.indent = 4.0;
+                ui.indent("scroll_indent", |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            /*
+                            Lookup in database in this order until exists:
+                            1. base                                     -- first
+                            2. surface
+                            3. base minus last letter (e.g. 素敵な)
+                            4. surface minus last letter                -- last
+                            */
+                            if let Some(dictionary_entry) = self
+                                .dictionary
+                                .lookup(&self.words[self.selected].base)
+                                .expect(&format!(
+                                    "Error getting from database when looking up base: {}",
+                                    &self.words[self.selected].base
+                                ))
+                            {
+                                self.display_terms_prioritized(ui, &dictionary_entry);
+                            } else if let Some(dictionary_entry) = self
+                                .dictionary
+                                .lookup(&self.words[self.selected].surface)
+                                .expect(&format!(
+                                    "Error getting from database when looking up surface: {}",
+                                    &self.words[self.selected].surface
                                 ))
                             {
                                 self.display_terms_prioritized(ui, &dictionary_entry);
                             } else {
-                                let mut surface_minus_one: String =
-                                    self.words[self.selected].surface.clone();
-                                _ = surface_minus_one.pop();
+                                let mut base_minus_one: String =
+                                    self.words[self.selected].base.clone();
+                                _ = base_minus_one.pop();
                                 if let Some(dictionary_entry) =
+                                    self.dictionary.lookup(&base_minus_one).expect(&format!(
+                                        "Error getting from database when looking up base-1: {}",
+                                        &base_minus_one
+                                    ))
+                                {
+                                    self.display_terms_prioritized(ui, &dictionary_entry);
+                                } else {
+                                    let mut surface_minus_one: String =
+                                        self.words[self.selected].surface.clone();
+                                    _ = surface_minus_one.pop();
+                                    if let Some(dictionary_entry) =
                                     self.dictionary.lookup(&surface_minus_one).expect(&format!(
                                         "Error getting from database when looking up surface-1: {}",
                                         &surface_minus_one
@@ -424,15 +446,16 @@ impl eframe::App for MyApp {
                                 {
                                     self.display_terms_prioritized(ui, &dictionary_entry);
                                 }
+                                }
                             }
-                        }
 
-                        ui.add_space(40.0);
-                    });
+                            ui.add_space(40.0);
+                        });
+                });
             });
-        });
         egui::TopBottomPanel::bottom("footer")
             .min_height(40.0)
+            .frame(custom_frame)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     if ui
