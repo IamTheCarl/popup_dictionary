@@ -164,7 +164,6 @@ impl Dictionary {
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
         let wildcard: String = String::from("*");
-
         for word in &jmdict.words {
             let current_id: String = word.id.to_string();
             if !word.kanji.is_empty() {
