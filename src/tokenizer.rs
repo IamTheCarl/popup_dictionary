@@ -7,14 +7,16 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use vibrato::dictionary::LexType;
 use vibrato::{Dictionary, Tokenizer};
-
-pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
+pub fn tokenize(
+    query: &String,
+    dictionary: &crate::dictionary::Dictionary,
+) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
     let system_dic_path: PathBuf = match dirs::config_dir() {
         Some(path) => path.join("popup_dictionary/dicts/system.dic"),
         None => Err("No valid config path found in environment variables.")?,
     };
-    let file: File = File::open(system_dic_path)?;
-    let reader: BufReader<File> = BufReader::new(file);
+    let system_dic: File = File::open(system_dic_path)?;
+    let reader: BufReader<File> = BufReader::new(system_dic);
     let dict: Dictionary = Dictionary::read(reader)?;
 
     let tokenizer: Tokenizer = Tokenizer::new(dict);
@@ -30,11 +32,22 @@ pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
             _ => {
                 if token.feature().starts_with("特殊") {
                     Validity::INVALID
+                } else if token.feature().starts_with("助詞") {
+                    Validity::VALID
                 } else {
                     Validity::UNKNOWN
                 }
             }
         };
+        if token
+            .feature()
+            .split(",")
+            .nth(3)
+            .unwrap_or("")
+            .contains("形")
+        {
+            println!("{:?}", token.feature());
+        }
 
         words.push(ParsedWord {
             surface: token.surface().to_string(),
@@ -47,14 +60,102 @@ pub fn tokenize(query: &String) -> Result<Vec<ParsedWord>, Box<dyn Error>> {
             response: None,
             valid_word: validity,
         });
+        println!(
+            "{:?}{:?}",
+            words[words.len() - 1].surface,
+            words[words.len() - 1].base
+        );
     }
+
+    words = improve_tokens(&mut words, dictionary);
+
     Ok(words)
+}
+
+fn improve_tokens(
+    words: &mut Vec<ParsedWord>,
+    dictionary: &crate::dictionary::Dictionary,
+) -> Vec<ParsedWord> {
+    let mut new_words: Vec<ParsedWord> = Vec::new();
+    let mut start_idx: usize = 0;
+
+    while start_idx < words.len() {
+        let mut found_match: bool = false;
+
+        let is_not_particle: bool = match words[start_idx].valid_word {
+            Validity::VALID => false,
+            _ => true,
+        };
+        if is_not_particle {
+            let word_len = if words.len() > 37 { 37 } else { words.len() }; // 37 characters is the biggest word in the dictionary
+
+            for end_idx in (start_idx + 1..=word_len).rev() {
+                let base: String = words[start_idx..end_idx]
+                    .iter()
+                    .map(|w| w.base.as_str())
+                    .collect::<String>();
+                let surface: String = words[start_idx..end_idx]
+                    .iter()
+                    .map(|w| w.surface.as_str())
+                    .collect::<String>();
+
+                if let Some(dictionary_entry) = dictionary.lookup(&surface).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    surface
+                )) {
+                    println!(
+                        "b:{:?} s:{:?} db:{:?} ds:{:?}",
+                        base,
+                        surface,
+                        dictionary_entry.terms[0].term,
+                        dictionary_entry.terms[0].reading
+                    );
+                    new_words.push(ParsedWord {
+                        surface,
+                        base,
+                        response: None,
+                        valid_word: Validity::UNKNOWN,
+                    });
+                    start_idx = end_idx;
+                    found_match = true;
+                    break;
+                } else if let Some(dictionary_entry) = dictionary.lookup(&base).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    base
+                )) {
+                    println!(
+                        "b:{:?} s:{:?} db:{:?} ds:{:?}",
+                        base,
+                        surface,
+                        dictionary_entry.terms[0].term,
+                        dictionary_entry.terms[0].reading
+                    );
+                    new_words.push(ParsedWord {
+                        surface,
+                        base,
+                        response: None,
+                        valid_word: Validity::UNKNOWN,
+                    });
+                    start_idx = end_idx;
+                    found_match = true;
+                    break;
+                }
+            }
+        }
+
+        if !found_match {
+            new_words.push(words[start_idx].clone());
+            start_idx += 1;
+        }
+    }
+    //words.to_vec()
+    new_words
 }
 
 #[derive(Clone)]
 pub struct ParsedWord {
-    pub surface: String,
-    pub base: String,
+    pub surface: String, // term as input by user
+    pub base: String,    // deinflected surface as given by tokenizer
     response: Option<Response>,
     valid_word: Validity,
 }
