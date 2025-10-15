@@ -1,12 +1,26 @@
+use bincode::config::Endianness;
 use curl::easy::{Easy, List};
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 use vibrato::dictionary::LexType;
 use vibrato::{Dictionary, Tokenizer};
+
+const CONJ_FORMS: phf::Map<&'static str, &'static str> = phf::phf_map! {
+    "*" => "*",
+};
+
+pub fn get_form(form: &str) -> &str {
+    match CONJ_FORMS.get(form) {
+        Some(description) => description,
+        None => form,
+    }
+}
+
 pub fn tokenize(
     query: &String,
     dictionary: &crate::dictionary::Dictionary,
@@ -39,16 +53,9 @@ pub fn tokenize(
                 }
             }
         };
-        if token
-            .feature()
-            .split(",")
-            .nth(3)
-            .unwrap_or("")
-            .contains("形")
-        {
-            println!("{:?}", token.feature());
-        }
-
+        println!("{:?}", token.feature());
+        let conjform: String = token.feature().split(",").nth(3).unwrap_or("*").to_string();
+        println!("{:?}", conjform);
         words.push(ParsedWord {
             surface: token.surface().to_string(),
             base: token
@@ -57,14 +64,10 @@ pub fn tokenize(
                 .nth(4)
                 .unwrap_or(token.surface())
                 .to_string(),
+            forms: [conjform].to_vec(),
             response: None,
             valid_word: validity,
         });
-        println!(
-            "{:?}{:?}",
-            words[words.len() - 1].surface,
-            words[words.len() - 1].base
-        );
     }
 
     words = improve_tokens(&mut words, dictionary);
@@ -99,45 +102,40 @@ fn improve_tokens(
                     .map(|w| w.surface.as_str())
                     .collect::<String>();
 
-                if let Some(dictionary_entry) = dictionary.lookup(&surface).expect(&format!(
+                if let Some(_) = dictionary.lookup(&surface).expect(&format!(
                     "Error getting from database when looking up base: {}",
                     surface
                 )) {
-                    println!(
-                        "b:{:?} s:{:?} db:{:?} ds:{:?}",
-                        base,
-                        surface,
-                        dictionary_entry.terms[0].term,
-                        dictionary_entry.terms[0].reading
-                    );
-                    new_words.push(ParsedWord {
-                        surface,
-                        base,
-                        response: None,
-                        valid_word: Validity::UNKNOWN,
-                    });
-                    start_idx = end_idx;
                     found_match = true;
-                    break;
-                } else if let Some(dictionary_entry) = dictionary.lookup(&base).expect(&format!(
+                } else if let Some(_) = dictionary.lookup(&base).expect(&format!(
                     "Error getting from database when looking up base: {}",
                     base
                 )) {
+                    found_match = true;
+                }
+                if found_match {
+                    let mut seen: HashSet<String> = HashSet::new();
+                    let combined_forms: Vec<String> = words[start_idx..end_idx]
+                        .iter()
+                        .flat_map(|word| &word.forms)
+                        .filter(|form| seen.insert(form.to_string()))
+                        .cloned()
+                        .collect();
                     println!(
-                        "b:{:?} s:{:?} db:{:?} ds:{:?}",
-                        base,
+                        "{:?},{:?},{:?},{:?}",
                         surface,
-                        dictionary_entry.terms[0].term,
-                        dictionary_entry.terms[0].reading
+                        base,
+                        combined_forms,
+                        words[start_idx..end_idx].to_vec()
                     );
                     new_words.push(ParsedWord {
                         surface,
                         base,
+                        forms: combined_forms,
                         response: None,
                         valid_word: Validity::UNKNOWN,
                     });
                     start_idx = end_idx;
-                    found_match = true;
                     break;
                 }
             }
@@ -148,14 +146,15 @@ fn improve_tokens(
             start_idx += 1;
         }
     }
-    //words.to_vec()
+
     new_words
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ParsedWord {
-    pub surface: String, // term as input by user
-    pub base: String,    // deinflected surface as given by tokenizer
+    pub surface: String,    // term as input by user
+    pub base: String,       // deinflected surface as given by tokenizer
+    pub forms: Vec<String>, // conjforms
     response: Option<Response>,
     valid_word: Validity,
 }
@@ -223,7 +222,7 @@ impl ParsedWord {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Validity {
     VALID,
     INVALID,

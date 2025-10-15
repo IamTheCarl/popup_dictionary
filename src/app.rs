@@ -380,7 +380,31 @@ impl eframe::App for MyApp {
                     }
                 });
 
-                ui.add_space(40.0);
+                ui.add_space(20.0);
+                let forms_string: String = self.words[self.selected]
+                    .forms
+                    .iter()
+                    .map(|form| crate::tokenizer::get_form(form))
+                    .collect::<Vec<&str>>()
+                    .join(", ");
+                if forms_string != "*" {
+                    ui.scope(|ui| {
+                        ui.style_mut()
+                            .visuals
+                            .widgets
+                            .noninteractive
+                            .bg_stroke
+                            .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
+                        ui.separator();
+                    });
+                    ui.label(
+                        RichText::new(format!("Forms: {}", forms_string))
+                            .color(Color32::WHITE)
+                            .size(14.0),
+                    );
+                } else {
+                    ui.add_space(32.0);
+                }
                 ui.scope(|ui| {
                     ui.style_mut()
                         .visuals
@@ -390,7 +414,6 @@ impl eframe::App for MyApp {
                         .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
                     ui.separator();
                 });
-                //ui.heading(RichText::new("Definition:").color(Color32::WHITE));
 
                 ui.style_mut().visuals.indent_has_left_vline = false;
                 ui.style_mut().spacing.indent = 4.0;
