@@ -12,6 +12,11 @@ use vibrato::{Dictionary, Tokenizer};
 
 const CONJ_FORMS: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "*" => "*",
+    "タ形" => "Past",
+    "ダ列タ形" => "Past",
+    "タ系連用テ形" => "Te-form",
+    "ダ列タ系連用テ形" => "Te-form",
+    "タ系連用タリ形" => "Tari-form"
 };
 
 pub fn get_form(form: &str) -> &str {
