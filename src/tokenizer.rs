@@ -95,10 +95,14 @@ fn improve_tokens(
             _ => true,
         };
         if is_not_particle {
-            let word_len = if words.len() > 37 { 37 } else { words.len() }; // 37 characters is the biggest word in the dictionary
+            let word_len = if words.len() > 37 + start_idx {
+                37 + start_idx
+            } else {
+                words.len()
+            }; // 37 characters is the biggest word in the dictionary
 
             for end_idx in (start_idx + 1..=word_len).rev() {
-                let base: String = words[start_idx..end_idx]
+                let mut base: String = words[start_idx..end_idx]
                     .iter()
                     .map(|w| w.base.as_str())
                     .collect::<String>();
@@ -106,6 +110,16 @@ fn improve_tokens(
                     .iter()
                     .map(|w| w.surface.as_str())
                     .collect::<String>();
+                let end_idx_minus_one: usize = if end_idx - 1 >= start_idx {
+                    end_idx - 1
+                } else {
+                    start_idx
+                };
+                let mut only_last_base: String = words[start_idx..end_idx_minus_one]
+                    .iter()
+                    .map(|w| w.surface.as_str())
+                    .collect::<String>();
+                only_last_base.push_str(&words[end_idx_minus_one].base);
 
                 if let Some(_) = dictionary.lookup(&surface).expect(&format!(
                     "Error getting from database when looking up base: {}",
@@ -116,6 +130,13 @@ fn improve_tokens(
                     "Error getting from database when looking up base: {}",
                     base
                 )) {
+                    found_match = true;
+                } else if let Some(_) = dictionary.lookup(&only_last_base).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    only_last_base
+                )) {
+                    println!("TRUE: {:?} {:? } {:?}", surface, base, only_last_base);
+                    base = only_last_base;
                     found_match = true;
                 }
                 if found_match {
