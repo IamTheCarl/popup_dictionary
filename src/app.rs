@@ -329,55 +329,65 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default()
             .frame(custom_frame)
             .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    for (index, word) in self.words.iter().enumerate() {
-                        let font_size: f32 = 20.0;
-                        let mut label_text: RichText =
-                            RichText::new(format!("{}", word.surface)).size(font_size);
-                        if word.is_valid() {
-                            label_text = label_text.underline().color(Color32::GRAY);
-                            if index == self.selected {
-                                label_text = label_text.color(Color32::WHITE);
-                            }
-
-                            let text_size: egui::Vec2 = {
-                                let temp_galley = ui.fonts(|f| {
-                                    f.layout_no_wrap(
-                                        label_text.text().to_string(),
-                                        egui::FontId::proportional(font_size),
-                                        Color32::PLACEHOLDER,
-                                    )
-                                });
-                                temp_galley.size()
-                            };
-                            let (background_rect, _) =
-                                ui.allocate_exact_size(text_size, egui::Sense::hover());
-                            let label_rect =
-                                egui::Rect::from_center_size(background_rect.center(), text_size);
-
-                            let response = ui
-                                .allocate_new_ui(
-                                    egui::UiBuilder::new().max_rect(label_rect),
-                                    |ui| ui.label(label_text),
-                                )
-                                .inner;
-                            if response.hovered() {
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                            }
-                            if response.hovered() {
-                                ui.painter().rect_filled(
-                                    background_rect,
-                                    egui::CornerRadius::same(4),
-                                    Color32::from_rgba_premultiplied(40, 40, 40, 40),
-                                );
-                            }
-                            if response.clicked() {
-                                self.selected = index;
-                            }
-                        } else {
-                            ui.label(label_text.clone());
+                ui.horizontal_top(|ui| {
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        ui.set_min_height(42.0);
+                        let delta: egui::Vec2 = ui.ctx().input(|i| i.raw_scroll_delta);
+                        if delta.y != 0.0 {
+                            ui.scroll_with_delta(egui::Vec2::new(delta.y * 1.2, 0.0));
                         }
-                    }
+
+                        for (index, word) in self.words.iter().enumerate() {
+                            let font_size: f32 = 20.0;
+                            let mut label_text: RichText =
+                                RichText::new(format!("{}", word.surface)).size(font_size);
+                            if word.is_valid() {
+                                label_text = label_text.underline().color(Color32::GRAY);
+                                if index == self.selected {
+                                    label_text = label_text.color(Color32::WHITE);
+                                }
+
+                                let text_size: egui::Vec2 = {
+                                    let temp_galley = ui.fonts(|f| {
+                                        f.layout_no_wrap(
+                                            label_text.text().to_string(),
+                                            egui::FontId::proportional(font_size),
+                                            Color32::PLACEHOLDER,
+                                        )
+                                    });
+                                    temp_galley.size()
+                                };
+                                let (background_rect, _) =
+                                    ui.allocate_exact_size(text_size, egui::Sense::hover());
+                                let label_rect = egui::Rect::from_center_size(
+                                    background_rect.center(),
+                                    text_size,
+                                );
+
+                                let response = ui
+                                    .allocate_new_ui(
+                                        egui::UiBuilder::new().max_rect(label_rect),
+                                        |ui| ui.label(label_text),
+                                    )
+                                    .inner;
+                                if response.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                if response.hovered() {
+                                    ui.painter().rect_filled(
+                                        background_rect,
+                                        egui::CornerRadius::same(4),
+                                        Color32::from_rgba_premultiplied(40, 40, 40, 40),
+                                    );
+                                }
+                                if response.clicked() {
+                                    self.selected = index;
+                                }
+                            } else {
+                                ui.label(label_text.clone());
+                            }
+                        }
+                    });
                 });
 
                 ui.add_space(20.0);
