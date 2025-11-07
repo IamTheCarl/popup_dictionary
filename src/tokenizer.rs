@@ -16,7 +16,9 @@ const CONJ_FORMS: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "ダ列タ形" => "Past",
     "タ系連用テ形" => "Te-form",
     "ダ列タ系連用テ形" => "Te-form",
-    "タ系連用タリ形" => "Tari-form"
+    "タ系連用タリ形" => "Tari-form",
+    "命令形" => "Imperative",
+    "意志形" => "Volitional"
 };
 
 pub fn get_form(form: &str) -> &str {
