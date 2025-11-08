@@ -200,7 +200,7 @@ impl MyApp {
     fn display_tag(ui: &mut Ui, tag: &str) {
         let text_color: Color32 = Color32::WHITE;
 
-        let text_galley = ui.fonts(|f| {
+        let text_galley = ui.fonts_mut(|f| {
             f.layout_no_wrap(
                 tag.to_string(),
                 egui::FontId::proportional(14.0),
@@ -244,7 +244,7 @@ impl MyApp {
         let mut galley_data = Vec::new();
 
         for furigana in furigana_vec {
-            let main_galley = ui.fonts(|f| {
+            let main_galley = ui.fonts_mut(|f| {
                 f.layout_no_wrap(
                     furigana.ruby.to_string(),
                     egui::FontId::proportional(main_font_size),
@@ -253,7 +253,7 @@ impl MyApp {
             });
 
             let furigana_galley = if let Some(reading) = &furigana.rt {
-                ui.fonts(|f| {
+                ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         reading.to_string(),
                         egui::FontId::proportional(furigana_font_size),
@@ -261,7 +261,7 @@ impl MyApp {
                     )
                 })
             } else {
-                ui.fonts(|f| {
+                ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         "あ".to_string(), // invisible placeholder
                         egui::FontId::proportional(furigana_font_size),
@@ -332,10 +332,6 @@ impl eframe::App for MyApp {
                 ui.horizontal_top(|ui| {
                     egui::ScrollArea::horizontal().show(ui, |ui| {
                         ui.set_min_height(42.0);
-                        let delta: egui::Vec2 = ui.ctx().input(|i| i.raw_scroll_delta);
-                        if delta.y != 0.0 {
-                            ui.scroll_with_delta(egui::Vec2::new(delta.y * 1.2, 0.0));
-                        }
 
                         for (index, word) in self.words.iter().enumerate() {
                             let font_size: f32 = 20.0;
@@ -348,7 +344,7 @@ impl eframe::App for MyApp {
                                 }
 
                                 let text_size: egui::Vec2 = {
-                                    let temp_galley = ui.fonts(|f| {
+                                    let temp_galley = ui.fonts_mut(|f| {
                                         f.layout_no_wrap(
                                             label_text.text().to_string(),
                                             egui::FontId::proportional(font_size),
@@ -365,7 +361,7 @@ impl eframe::App for MyApp {
                                 );
 
                                 let response = ui
-                                    .allocate_new_ui(
+                                    .scope_builder(
                                         egui::UiBuilder::new().max_rect(label_rect),
                                         |ui| ui.label(label_text),
                                     )

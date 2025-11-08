@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.31.1"
-egui = "0.31.1"
-curl = "0.4.47"
-serde_json = "1.0.140"
-serde = { version = "1.0.219", features = ["derive"] }
+eframe = "0.33.0"
+egui = "0.33.0"
+curl = "0.4.49"
+serde_json = "1.0.145"
+serde = { version = "1.0.228", features = ["derive"] }
 vibrato = "0.5.2"
 sled = "0.34.7"
 bincode = "2.0.1"
 dirs = "6.0.0"
-phf = { version = "0.12.1", features = ["macros"] }
+phf = { version = "0.13.1", features = ["macros"] }
