@@ -28,7 +28,8 @@ pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), e
 
 struct MyApp {
     words: Vec<ParsedWord>,
-    selected: usize,
+    selected_word: usize,
+    active_tab: usize,
     dictionary: Dictionary,
 }
 
@@ -42,7 +43,8 @@ impl MyApp {
         add_font(&cc.egui_ctx);
         Self {
             words: words.to_vec(),
-            selected: 0,
+            selected_word: 0,
+            active_tab: 0,
             dictionary: dictionary.clone(),
         }
     }
@@ -60,7 +62,7 @@ impl MyApp {
         let mut terms_to_display: Vec<DictionaryTerm> = entry.terms.clone();
         let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
         terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == self.words[self.selected].surface {
+            if term.term.is_empty() && term.reading == self.words[self.selected_word].surface {
                 filtered_terms.push(term.clone());
                 false
             } else {
@@ -70,7 +72,7 @@ impl MyApp {
         Self::display_terms(ui, &filtered_terms);
         filtered_terms.clear();
         terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == self.words[self.selected].base {
+            if term.term.is_empty() && term.reading == self.words[self.selected_word].base {
                 filtered_terms.push(term.clone());
                 false
             } else {
@@ -80,7 +82,7 @@ impl MyApp {
         Self::display_terms(ui, &filtered_terms);
         filtered_terms.clear();
         terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == self.words[self.selected].surface {
+            if !term.term.is_empty() && term.reading == self.words[self.selected_word].surface {
                 filtered_terms.push(term.clone());
                 false
             } else {
@@ -90,7 +92,7 @@ impl MyApp {
         Self::display_terms(ui, &filtered_terms);
         filtered_terms.clear();
         terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == self.words[self.selected].base {
+            if !term.term.is_empty() && term.reading == self.words[self.selected_word].base {
                 filtered_terms.push(term.clone());
                 false
             } else {
@@ -339,7 +341,7 @@ impl eframe::App for MyApp {
                                 RichText::new(format!("{}", word.surface)).size(font_size);
                             if word.is_valid() {
                                 label_text = label_text.underline().color(Color32::GRAY);
-                                if index == self.selected {
+                                if index == self.selected_word {
                                     label_text = label_text.color(Color32::WHITE);
                                 }
 
@@ -377,7 +379,7 @@ impl eframe::App for MyApp {
                                     );
                                 }
                                 if response.clicked() {
-                                    self.selected = index;
+                                    self.selected_word = index;
                                 }
                             } else {
                                 ui.label(label_text.clone());
@@ -387,7 +389,7 @@ impl eframe::App for MyApp {
                 });
 
                 ui.add_space(20.0);
-                let forms_string: String = self.words[self.selected]
+                let forms_string: String = self.words[self.selected_word]
                     .forms
                     .iter()
                     .map(|form| crate::tokenizer::get_form(form))
@@ -436,25 +438,25 @@ impl eframe::App for MyApp {
                             */
                             if let Some(dictionary_entry) = self
                                 .dictionary
-                                .lookup(&self.words[self.selected].base)
+                                .lookup(&self.words[self.selected_word].base)
                                 .expect(&format!(
                                     "Error getting from database when looking up base: {}",
-                                    &self.words[self.selected].base
+                                    &self.words[self.selected_word].base
                                 ))
                             {
                                 self.display_terms_prioritized(ui, &dictionary_entry);
                             } else if let Some(dictionary_entry) = self
                                 .dictionary
-                                .lookup(&self.words[self.selected].surface)
+                                .lookup(&self.words[self.selected_word].surface)
                                 .expect(&format!(
                                     "Error getting from database when looking up surface: {}",
-                                    &self.words[self.selected].surface
+                                    &self.words[self.selected_word].surface
                                 ))
                             {
                                 self.display_terms_prioritized(ui, &dictionary_entry);
                             } else {
                                 let mut base_minus_one: String =
-                                    self.words[self.selected].base.clone();
+                                    self.words[self.selected_word].base.clone();
                                 _ = base_minus_one.pop();
                                 if let Some(dictionary_entry) =
                                     self.dictionary.lookup(&base_minus_one).expect(&format!(
@@ -465,7 +467,7 @@ impl eframe::App for MyApp {
                                     self.display_terms_prioritized(ui, &dictionary_entry);
                                 } else {
                                     let mut surface_minus_one: String =
-                                        self.words[self.selected].surface.clone();
+                                        self.words[self.selected_word].surface.clone();
                                     _ = surface_minus_one.pop();
                                     if let Some(dictionary_entry) =
                                     self.dictionary.lookup(&surface_minus_one).expect(&format!(
@@ -487,6 +489,21 @@ impl eframe::App for MyApp {
             .frame(custom_frame)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
+                    let tabs: Vec<&str> = Vec::from(["jmdict+jumandic", "jotoba"]);
+
+                    for (i, tab) in tabs.iter().enumerate() {
+                        if ui
+                            .add(egui::Button::selectable(
+                                self.active_tab == i,
+                                RichText::new(*tab).size(20.0),
+                            ))
+                            .clicked()
+                        {
+                            self.active_tab = i;
+                        };
+                    }
+
+                    /*
                     if ui
                         .button(RichText::new("Open in browser").size(20.0))
                         .clicked()
@@ -498,7 +515,7 @@ impl eframe::App for MyApp {
                             ),
                             new_tab: true,
                         });
-                    }
+                    }*/
                 })
             });
     }
