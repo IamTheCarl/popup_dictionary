@@ -1,0 +1,283 @@
+use curl::easy::{Easy, List};
+use serde::Deserialize;
+use serde::Serialize;
+use std::collections::HashSet;
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
+use vibrato::dictionary::LexType;
+use vibrato::{Dictionary, Tokenizer};
+
+use crate::plugin::{Token, Validity};
+
+const CONJ_FORMS: phf::Map<&'static str, &'static str> = phf::phf_map! {
+    "*" => "*",
+    "タ形" => "Past",
+    "ダ列タ形" => "Past",
+    "タ系連用テ形" => "Te-form",
+    "ダ列タ系連用テ形" => "Te-form",
+    "タ系連用タリ形" => "Tari-form",
+    "命令形" => "Imperative",
+    "意志形" => "Volitional"
+};
+
+pub fn get_form(form: &str) -> &str {
+    match CONJ_FORMS.get(form) {
+        Some(description) => description,
+        None => form,
+    }
+}
+
+pub fn tokenize(
+    query: &String,
+    dictionary: &crate::plugins::jujum_plugin::jmdict_dictionary::Dictionary,
+) -> Result<Vec<Token>, Box<dyn Error>> {
+    let system_dic_path: PathBuf = match dirs::config_dir() {
+        Some(path) => path.join("popup_dictionary/dicts/system.dic"),
+        None => Err("No valid config path found in environment variables.")?,
+    };
+    let system_dic: File = File::open(system_dic_path)?;
+    let reader: BufReader<File> = BufReader::new(system_dic);
+    let dict: Dictionary = Dictionary::read(reader)?;
+
+    let tokenizer: Tokenizer = Tokenizer::new(dict);
+    let mut worker = tokenizer.new_worker();
+
+    worker.reset_sentence(query);
+    worker.tokenize();
+
+    let mut words: Vec<Token> = Vec::new();
+    for token in worker.token_iter() {
+        let validity: Validity = match token.lex_type() {
+            LexType::Unknown => Validity::INVALID,
+            _ => {
+                if token.feature().starts_with("特殊") {
+                    Validity::INVALID
+                } else if token.feature().starts_with("助詞") {
+                    Validity::VALID
+                } else {
+                    Validity::UNKNOWN
+                }
+            }
+        };
+        println!("{:?}", token.feature());
+        let conjform: String = token.feature().split(",").nth(3).unwrap_or("*").to_string();
+        println!("{:?}", conjform);
+        words.push(Token {
+            input_word: token.surface().to_string(),
+            deinflected_word: token
+                .feature()
+                .split(",")
+                .nth(4)
+                .unwrap_or(token.surface())
+                .to_string(),
+            conjugations: [conjform].to_vec(),
+            validity,
+        });
+    }
+
+    words = improve_tokens(&mut words, dictionary);
+
+    Ok(words)
+}
+
+fn improve_tokens(
+    words: &mut Vec<Token>,
+    dictionary: &crate::plugins::jujum_plugin::jmdict_dictionary::Dictionary,
+) -> Vec<Token> {
+    let mut new_words: Vec<Token> = Vec::new();
+    let mut start_idx: usize = 0;
+
+    while start_idx < words.len() {
+        let mut found_match: bool = false;
+
+        let is_not_particle: bool = match words[start_idx].validity {
+            Validity::VALID => false,
+            _ => true,
+        };
+        if is_not_particle {
+            let word_len = if words.len() > 37 + start_idx {
+                37 + start_idx
+            } else {
+                words.len()
+            }; // 37 characters is the biggest word in the dictionary
+
+            for end_idx in (start_idx + 1..=word_len).rev() {
+                let mut base: String = words[start_idx..end_idx]
+                    .iter()
+                    .map(|w| w.deinflected_word.as_str())
+                    .collect::<String>();
+                let surface: String = words[start_idx..end_idx]
+                    .iter()
+                    .map(|w| w.input_word.as_str())
+                    .collect::<String>();
+                let end_idx_minus_one: usize = if end_idx - 1 >= start_idx {
+                    end_idx - 1
+                } else {
+                    start_idx
+                };
+                let mut only_last_base: String = words[start_idx..end_idx_minus_one]
+                    .iter()
+                    .map(|w| w.input_word.as_str())
+                    .collect::<String>();
+                only_last_base.push_str(&words[end_idx_minus_one].deinflected_word);
+
+                if let Some(_) = dictionary.lookup(&surface).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    surface
+                )) {
+                    found_match = true;
+                } else if let Some(_) = dictionary.lookup(&base).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    base
+                )) {
+                    found_match = true;
+                } else if let Some(_) = dictionary.lookup(&only_last_base).expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    only_last_base
+                )) {
+                    println!("TRUE: {:?} {:? } {:?}", surface, base, only_last_base);
+                    base = only_last_base;
+                    found_match = true;
+                }
+                if found_match {
+                    let mut seen: HashSet<String> = HashSet::new();
+                    let combined_forms: Vec<String> = words[start_idx..end_idx]
+                        .iter()
+                        .flat_map(|word| &word.conjugations)
+                        .filter(|form| seen.insert(form.to_string()))
+                        .cloned()
+                        .collect();
+                    println!(
+                        "{:?},{:?},{:?},{:?}",
+                        surface,
+                        base,
+                        combined_forms,
+                        words[start_idx..end_idx].to_vec()
+                    );
+                    new_words.push(Token {
+                        input_word: surface,
+                        deinflected_word: base,
+                        conjugations: combined_forms,
+                        validity: Validity::UNKNOWN,
+                    });
+                    start_idx = end_idx;
+                    break;
+                }
+            }
+        }
+
+        if !found_match {
+            new_words.push(words[start_idx].clone());
+            start_idx += 1;
+        }
+    }
+
+    new_words
+}
+
+/*
+#[derive(Clone, Debug)]
+pub struct ParsedWord {
+    pub surface: String,    // term as input by user
+    pub base: String,       // deinflected surface as given by tokenizer
+    pub forms: Vec<String>, // conjforms
+    response: Option<Response>,
+    valid_word: Validity,
+}
+
+impl ParsedWord {
+    pub fn get_response(&mut self) -> Option<&Response> {
+        match self.valid_word {
+            Validity::VALID => self.response.as_ref(),
+            Validity::INVALID => None,
+            Validity::UNKNOWN => {
+                if let Ok(response) = self.fetch_word() {
+                    if response.words.is_empty() {
+                        self.response = None;
+                        self.valid_word = Validity::INVALID;
+                    } else {
+                        self.response = Some(response);
+                        self.valid_word = Validity::VALID;
+                    }
+                } else {
+                    self.response = None;
+                    self.valid_word = Validity::INVALID;
+                }
+                self.response.as_ref()
+            }
+        }
+    }
+
+
+    pub fn is_valid(&self) -> bool {
+        match self.valid_word {
+            Validity::INVALID => false,
+            _ => true,
+        }
+    }
+
+    fn fetch_word(&self) -> Result<Response, Box<dyn Error>> {
+        let mut easy = Easy::new();
+        easy.url("https://jotoba.de/api/search/words")?;
+        easy.post(true)?;
+        let mut list = List::new();
+        list.append("Content-Type: application/json")?;
+        easy.http_headers(list)?;
+
+        let mut buf = Vec::new();
+
+        let request_string: String = format!(
+            "{}{}{}",
+            r#"{"query":""#, self.surface, r#"","language":"English"}"#
+        );
+        let request: &[u8] = request_string.as_bytes();
+        easy.post_fields_copy(request)?;
+
+        {
+            let mut transfer = easy.transfer();
+            transfer.write_function(|data| {
+                buf.extend_from_slice(data);
+                Ok(data.len())
+            })?;
+            transfer.perform()?;
+        }
+
+        let json: Response =
+            serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
+
+        Ok(json)
+    }
+}
+
+
+#[derive(Clone, Debug)]
+enum Validity {
+    VALID,
+    INVALID,
+    UNKNOWN,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Response {
+    pub words: Vec<Word>,
+}*/
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Word {
+    pub reading: Reading,
+    pub senses: Vec<Sense>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Reading {
+    pub kana: String,
+    #[serde(default)]
+    pub kanji: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Sense {
+    pub glosses: Vec<String>,
+}

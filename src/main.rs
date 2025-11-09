@@ -2,9 +2,9 @@ use std::{env, process};
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let query: String = args.join("").replace(" ", "");
-    if !query.is_empty() {
-        if let Err(e) = popup_dictionary::run(&query) {
+    let sentence: String = args.join("").replace(" ", "");
+    if !sentence.is_empty() {
+        if let Err(e) = popup_dictionary::run(&sentence) {
             eprintln!("Error: {e}");
             process::exit(1);
         }

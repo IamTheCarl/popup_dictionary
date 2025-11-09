@@ -1,14 +1,21 @@
+use std::sync::{Arc, Mutex};
+
+/*
 use crate::{
     dictionary::{Dictionary, DictionaryEntry, DictionaryTerm, Furigana},
     tokenizer::ParsedWord,
-};
+};*/
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, CornerRadius, RichText, Ui};
 
-pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), eframe::Error> {
+use crate::plugin::{Plugin, Plugins, Token};
+use crate::plugins::jotoba_plugin::JotobaPlugin;
+use crate::plugins::jujum_plugin::jujum_plugin::JujumPlugin;
+
+pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
     // Configure native window options
     let options = NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -22,289 +29,72 @@ pub fn run_app(words: &Vec<ParsedWord>, dictionary: &Dictionary) -> Result<(), e
     eframe::run_native(
         "Popup Dictionary", // The name of your application
         options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(cc, words, dictionary)))),
+        Box::new(|cc| Ok(Box::new(MyApp::new(cc, sentence)))),
     )
 }
 
-struct MyApp {
-    words: Vec<ParsedWord>,
-    selected_word: usize,
-    active_tab: usize,
-    dictionary: Dictionary,
+enum PluginState {
+    Loading,
+    Ready(Box<dyn Plugin>),
+}
+
+pub struct MyApp {
+    //words: Vec<ParsedWord>,
+    sentence: String,
+    selected_word_index: usize,
+    //dictionary: Dictionary,
+    plugin_state: Arc<Mutex<PluginState>>,
+    available_plugins: Vec<Plugins>,
+    active_plugin_index: usize,
 }
 
 impl MyApp {
-    fn new(
-        cc: &eframe::CreationContext<'_>,
-        words: &Vec<ParsedWord>,
-        dictionary: &Dictionary,
-    ) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, sentence: &str) -> Self {
         // You can load initial state here if needed
-        add_font(&cc.egui_ctx);
-        Self {
-            words: words.to_vec(),
-            selected_word: 0,
-            active_tab: 0,
-            dictionary: dictionary.clone(),
-        }
+        Self::load_main_font(&cc.egui_ctx);
+
+        let mut app = Self {
+            //words: words.to_vec(),
+            sentence: sentence.to_string(),
+            selected_word_index: 0,
+            //dictionary: dictionary.clone(),
+            plugin_state: Arc::new(Mutex::new(PluginState::Loading)),
+            available_plugins: Plugins::all(),
+            active_plugin_index: 0,
+        };
+
+        app.load_active_plugin();
+
+        app
     }
 
-    fn display_terms_prioritized(&self, ui: &mut Ui, entry: &DictionaryEntry) {
-        /*
-        Display terms in this priority:
-        1. no kanji, same as surface        -- first
-        2. no kanji, same as base
-        3. has kanji, same as surface
-        4. has kanji, same as base
-        5. rest                             -- last
-        */
-
-        let mut terms_to_display: Vec<DictionaryTerm> = entry.terms.clone();
-        let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
-        terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == self.words[self.selected_word].surface {
-                filtered_terms.push(term.clone());
-                false
-            } else {
-                true
-            }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == self.words[self.selected_word].base {
-                filtered_terms.push(term.clone());
-                false
-            } else {
-                true
-            }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == self.words[self.selected_word].surface {
-                filtered_terms.push(term.clone());
-                false
-            } else {
-                true
-            }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == self.words[self.selected_word].base {
-                filtered_terms.push(term.clone());
-                false
-            } else {
-                true
-            }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        Self::display_terms(ui, &terms_to_display);
+    fn load_main_font(ctx: &egui::Context) {
+        ctx.add_font(FontInsert::new(
+            "NotoSansCJKJP",
+            egui::FontData::from_static(include_bytes!("./fonts/popup_font.ttc")), // Currently: Noto Sans CJK JP
+            vec![
+                InsertFontFamily {
+                    family: egui::FontFamily::Proportional,
+                    priority: egui::epaint::text::FontPriority::Highest,
+                },
+                InsertFontFamily {
+                    family: egui::FontFamily::Monospace,
+                    priority: egui::epaint::text::FontPriority::Lowest,
+                },
+            ],
+        ));
     }
 
-    fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
-        for dictionary_term in terms {
-            if !dictionary_term.term.is_empty() {
-                if let Some(furigana_vec) = &dictionary_term.furigana {
-                    Self::display_furigana(ui, furigana_vec);
-                } else {
-                    let furigana: Vec<Furigana> = vec![Furigana {
-                        ruby: dictionary_term.term.to_string(),
-                        rt: Some(dictionary_term.reading.to_string()),
-                    }];
-                    Self::display_furigana(ui, &furigana);
-                }
-            } else {
-                ui.label(
-                    RichText::new(&dictionary_term.reading)
-                        .size(22.0)
-                        .color(Color32::WHITE),
-                );
-            }
+    fn load_active_plugin(&self) {
+        let state_clone = self.plugin_state.clone();
+        *state_clone.lock().unwrap() = PluginState::Loading;
 
-            let mut count: u32 = 0;
-            let mut last_tags: String = String::new();
-            for meaning in &dictionary_term.meanings {
-                let tags: String = meaning.tags.join("");
-                if tags != last_tags {
-                    last_tags = tags.clone();
-                    if count > 0 {
-                        ui.add_space(12.0);
-                        count = 1;
-                    }
-                    ui.add_space(4.0);
-                    Self::display_tags(ui, &meaning.tags);
-                }
-                if count == 0 {
-                    count = 1;
-                }
-
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(format!("{}.", count))
-                            .size(18.0)
-                            .color(Color32::GRAY),
-                    );
-                    ui.label(
-                        RichText::new(format!("{}", meaning.gloss.join(", ")))
-                            .size(18.0)
-                            .color(Color32::WHITE),
-                    );
-                });
-                if meaning.info.len() > 0 {
-                    ui.horizontal_top(|ui| {
-                        ui.label(
-                            RichText::new(format!("{}.", count))
-                                .size(18.0)
-                                .color(Color32::TRANSPARENT),
-                        );
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(
-                                RichText::new(format!("{}", meaning.info.join("; ")))
-                                    .size(12.0)
-                                    .color(Color32::GRAY),
-                            );
-                        });
-                    });
-                }
-
-                count += 1;
-            }
-
-            ui.add_space(10.0);
-
-            let percent: f32 = 0.8;
-            let width: f32 = ui.available_width() * percent;
-            let margin: f32 = (ui.available_width() - width) / 2.0;
-
-            ui.horizontal(|ui| {
-                ui.add_space(margin);
-                let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
-                ui.painter().line_segment(
-                    [rect.left_center(), rect.right_center()],
-                    egui::Stroke::new(1.0, Color32::from_rgba_premultiplied(20, 20, 20, 20)),
-                );
-            });
-
-            ui.add_space(10.0);
-        }
-    }
-
-    fn display_tags(ui: &mut Ui, tags: &Vec<String>) {
-        ui.horizontal_wrapped(|ui| {
-            for tag in tags {
-                Self::display_tag(ui, tag);
-            }
+        let active_plugin = self.available_plugins[self.active_plugin_index];
+        let plugin_sentence = String::from(&self.sentence);
+        std::thread::spawn(move || {
+            let plugin = active_plugin.generate(&plugin_sentence);
+            *state_clone.lock().unwrap() = PluginState::Ready(plugin);
         });
-    }
-
-    fn display_tag(ui: &mut Ui, tag: &str) {
-        let text_color: Color32 = Color32::WHITE;
-
-        let text_galley = ui.fonts_mut(|f| {
-            f.layout_no_wrap(
-                tag.to_string(),
-                egui::FontId::proportional(14.0),
-                text_color,
-            )
-        });
-
-        let padding = egui::Vec2::new(4.0, 0.0);
-        let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
-        let response = ui
-            .allocate_rect(rect, egui::Sense::hover())
-            .on_hover_text(Dictionary::get_tag(tag));
-
-        if response.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
-        }
-
-        ui.painter().rect_filled(
-            rect,
-            egui::CornerRadius::same(4),
-            Color32::from_rgb(50, 50, 50),
-        );
-
-        ui.painter().galley(
-            (rect.center() - text_galley.size() / 2.0) - egui::Vec2::new(0.0, 2.0),
-            text_galley,
-            text_color,
-        );
-
-        //ui.allocate_space(rect.size());
-    }
-
-    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>) {
-        let main_font_size: f32 = 22.0;
-        let furigana_font_size: f32 = 14.0;
-        let vertical_gap: f32 = 1.0;
-
-        // calculate how wide (and tall) the entire string will be
-        let mut total_width: f32 = 0.0;
-        let mut max_height: f32 = 0.0;
-        let mut galley_data = Vec::new();
-
-        for furigana in furigana_vec {
-            let main_galley = ui.fonts_mut(|f| {
-                f.layout_no_wrap(
-                    furigana.ruby.to_string(),
-                    egui::FontId::proportional(main_font_size),
-                    Color32::WHITE,
-                )
-            });
-
-            let furigana_galley = if let Some(reading) = &furigana.rt {
-                ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        reading.to_string(),
-                        egui::FontId::proportional(furigana_font_size),
-                        Color32::LIGHT_GRAY,
-                    )
-                })
-            } else {
-                ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        "あ".to_string(), // invisible placeholder
-                        egui::FontId::proportional(furigana_font_size),
-                        Color32::TRANSPARENT,
-                    )
-                })
-            };
-
-            let char_width: f32 = main_galley.size().x.max(furigana_galley.size().x);
-            let char_height: f32 = main_galley.size().y + furigana_galley.size().y + vertical_gap;
-
-            total_width += char_width;
-            max_height = max_height.max(char_height);
-
-            galley_data.push((main_galley, furigana_galley, char_width));
-        }
-
-        // then draw without gap between galleys
-        let (rect, _) = ui.allocate_exact_size(
-            egui::Vec2::new(total_width, max_height),
-            egui::Sense::empty(),
-        );
-
-        let mut current_x: f32 = rect.left();
-        for (main_galley, furigana_galley, char_width) in galley_data {
-            let furigana_pos = egui::Pos2::new(
-                current_x + (char_width - furigana_galley.size().x) * 0.5,
-                rect.top(),
-            );
-            ui.painter()
-                .galley(furigana_pos, furigana_galley, Color32::PLACEHOLDER);
-
-            let main_pos = egui::Pos2::new(
-                current_x + (char_width - main_galley.size().x) * 0.5,
-                rect.top() + furigana_font_size + vertical_gap,
-            );
-            ui.painter()
-                .galley(main_pos, main_galley, Color32::PLACEHOLDER);
-
-            current_x += char_width;
-        }
     }
 }
 
@@ -330,177 +120,97 @@ impl eframe::App for MyApp {
         };
         egui::CentralPanel::default()
             .frame(custom_frame)
-            .show(ctx, |ui| {
-                ui.horizontal_top(|ui| {
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        ui.set_min_height(42.0);
-
-                        for (index, word) in self.words.iter().enumerate() {
-                            let font_size: f32 = 20.0;
-                            let mut label_text: RichText =
-                                RichText::new(format!("{}", word.surface)).size(font_size);
-                            if word.is_valid() {
-                                label_text = label_text.underline().color(Color32::GRAY);
-                                if index == self.selected_word {
-                                    label_text = label_text.color(Color32::WHITE);
-                                }
-
-                                let text_size: egui::Vec2 = {
-                                    let temp_galley = ui.fonts_mut(|f| {
-                                        f.layout_no_wrap(
-                                            label_text.text().to_string(),
-                                            egui::FontId::proportional(font_size),
-                                            Color32::PLACEHOLDER,
-                                        )
-                                    });
-                                    temp_galley.size()
-                                };
-                                let (background_rect, _) =
-                                    ui.allocate_exact_size(text_size, egui::Sense::hover());
-                                let label_rect = egui::Rect::from_center_size(
-                                    background_rect.center(),
-                                    text_size,
-                                );
-
-                                let response = ui
-                                    .scope_builder(
-                                        egui::UiBuilder::new().max_rect(label_rect),
-                                        |ui| ui.label(label_text),
-                                    )
-                                    .inner;
-                                if response.hovered() {
-                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                                }
-                                if response.hovered() {
-                                    ui.painter().rect_filled(
-                                        background_rect,
-                                        egui::CornerRadius::same(4),
-                                        Color32::from_rgba_premultiplied(40, 40, 40, 40),
-                                    );
-                                }
-                                if response.clicked() {
-                                    self.selected_word = index;
-                                }
-                            } else {
-                                ui.label(label_text.clone());
-                            }
-                        }
+            .show(ctx, |ui| match &*self.plugin_state.lock().unwrap() {
+                PluginState::Loading => {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(ui.available_height() / 2.0 - 20.0);
+                        ui.spinner();
+                        ui.add(egui::Label::new(
+                            RichText::new("Loading Plugin...").size(20.0),
+                        ));
                     });
-                });
-
-                ui.add_space(20.0);
-                let forms_string: String = self.words[self.selected_word]
-                    .forms
-                    .iter()
-                    .map(|form| crate::tokenizer::get_form(form))
-                    .collect::<Vec<&str>>()
-                    .join(", ");
-                if forms_string != "*" {
-                    ui.scope(|ui| {
-                        ui.style_mut()
-                            .visuals
-                            .widgets
-                            .noninteractive
-                            .bg_stroke
-                            .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
-                        ui.separator();
-                    });
-                    ui.label(
-                        RichText::new(format!("Forms: {}", forms_string))
-                            .color(Color32::WHITE)
-                            .size(14.0),
-                    );
-                } else {
-                    ui.add_space(32.0);
+                    ctx.request_repaint();
                 }
-                ui.scope(|ui| {
-                    ui.style_mut()
-                        .visuals
-                        .widgets
-                        .noninteractive
-                        .bg_stroke
-                        .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
-                    ui.separator();
-                });
+                PluginState::Ready(plugin) => {
+                    let tokens: &Vec<Token> = plugin.get_tokens();
+                    ui.horizontal_top(|ui| {
+                        egui::ScrollArea::horizontal().show(ui, |ui| {
+                            ui.set_min_height(42.0);
 
-                ui.style_mut().visuals.indent_has_left_vline = false;
-                ui.style_mut().spacing.indent = 4.0;
-                ui.indent("scroll_indent", |ui| {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink(false)
-                        .show(ui, |ui| {
-                            /*
-                            Lookup in database in this order until exists:
-                            1. base                                     -- first
-                            2. surface
-                            3. base minus last letter (e.g. 素敵な)
-                            4. surface minus last letter                -- last
-                            */
-                            if let Some(dictionary_entry) = self
-                                .dictionary
-                                .lookup(&self.words[self.selected_word].base)
-                                .expect(&format!(
-                                    "Error getting from database when looking up base: {}",
-                                    &self.words[self.selected_word].base
-                                ))
-                            {
-                                self.display_terms_prioritized(ui, &dictionary_entry);
-                            } else if let Some(dictionary_entry) = self
-                                .dictionary
-                                .lookup(&self.words[self.selected_word].surface)
-                                .expect(&format!(
-                                    "Error getting from database when looking up surface: {}",
-                                    &self.words[self.selected_word].surface
-                                ))
-                            {
-                                self.display_terms_prioritized(ui, &dictionary_entry);
-                            } else {
-                                let mut base_minus_one: String =
-                                    self.words[self.selected_word].base.clone();
-                                _ = base_minus_one.pop();
-                                if let Some(dictionary_entry) =
-                                    self.dictionary.lookup(&base_minus_one).expect(&format!(
-                                        "Error getting from database when looking up base-1: {}",
-                                        &base_minus_one
-                                    ))
-                                {
-                                    self.display_terms_prioritized(ui, &dictionary_entry);
+                            for (index, word) in tokens.iter().enumerate() {
+                                let font_size: f32 = 20.0;
+                                let mut label_text: RichText =
+                                    RichText::new(format!("{}", word.input_word)).size(font_size);
+                                if word.is_valid() {
+                                    label_text = label_text.underline().color(Color32::GRAY);
+                                    if index == self.selected_word_index {
+                                        label_text = label_text.color(Color32::WHITE);
+                                    }
+
+                                    let text_size: egui::Vec2 = {
+                                        let temp_galley = ui.fonts_mut(|f| {
+                                            f.layout_no_wrap(
+                                                label_text.text().to_string(),
+                                                egui::FontId::proportional(font_size),
+                                                Color32::PLACEHOLDER,
+                                            )
+                                        });
+                                        temp_galley.size()
+                                    };
+                                    let (background_rect, _) =
+                                        ui.allocate_exact_size(text_size, egui::Sense::hover());
+                                    let label_rect = egui::Rect::from_center_size(
+                                        background_rect.center(),
+                                        text_size,
+                                    );
+
+                                    let response = ui
+                                        .scope_builder(
+                                            egui::UiBuilder::new().max_rect(label_rect),
+                                            |ui| ui.label(label_text),
+                                        )
+                                        .inner;
+                                    if response.hovered() {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                    }
+                                    if response.hovered() {
+                                        ui.painter().rect_filled(
+                                            background_rect,
+                                            egui::CornerRadius::same(4),
+                                            Color32::from_rgba_premultiplied(40, 40, 40, 40),
+                                        );
+                                    }
+                                    if response.clicked() {
+                                        self.selected_word_index = index;
+                                    }
                                 } else {
-                                    let mut surface_minus_one: String =
-                                        self.words[self.selected_word].surface.clone();
-                                    _ = surface_minus_one.pop();
-                                    if let Some(dictionary_entry) =
-                                    self.dictionary.lookup(&surface_minus_one).expect(&format!(
-                                        "Error getting from database when looking up surface-1: {}",
-                                        &surface_minus_one
-                                    ))
-                                {
-                                    self.display_terms_prioritized(ui, &dictionary_entry);
-                                }
+                                    ui.label(label_text.clone());
                                 }
                             }
-
-                            ui.add_space(40.0);
                         });
-                });
+                    });
+
+                    ui.add_space(20.0);
+
+                    plugin.display_token(self, ui, &tokens[self.selected_word_index]);
+                }
             });
         egui::TopBottomPanel::bottom("footer")
             .min_height(40.0)
             .frame(custom_frame)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    let tabs: Vec<&str> = Vec::from(["jmdict+jumandic", "jotoba"]);
-
-                    for (i, tab) in tabs.iter().enumerate() {
+                    for (i, active_plugin) in self.available_plugins.iter().enumerate() {
                         if ui
                             .add(egui::Button::selectable(
-                                self.active_tab == i,
-                                RichText::new(*tab).size(20.0),
+                                self.active_plugin_index == i,
+                                RichText::new(active_plugin.name()).size(20.0),
                             ))
                             .clicked()
                         {
-                            self.active_tab = i;
-                        };
+                            self.active_plugin_index = i;
+                            self.load_active_plugin();
+                        }
                     }
 
                     /*
@@ -521,23 +231,7 @@ impl eframe::App for MyApp {
     }
 }
 
-fn add_font(ctx: &egui::Context) {
-    ctx.add_font(FontInsert::new(
-        "NotoSansCJKJP",
-        egui::FontData::from_static(include_bytes!("./fonts/popup_font.ttc")),
-        vec![
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: egui::epaint::text::FontPriority::Highest,
-            },
-            InsertFontFamily {
-                family: egui::FontFamily::Monospace,
-                priority: egui::epaint::text::FontPriority::Lowest,
-            },
-        ],
-    ));
-}
-
+/*
 fn get_sentence_string(words: &Vec<ParsedWord>) -> String {
     let mut sentence: String = String::new();
     for word in words {
@@ -545,3 +239,4 @@ fn get_sentence_string(words: &Vec<ParsedWord>) -> String {
     }
     sentence
 }
+*/
