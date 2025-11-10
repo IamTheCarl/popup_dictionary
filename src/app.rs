@@ -206,6 +206,7 @@ impl eframe::App for MyApp {
                             ))
                             .clicked()
                         {
+                            self.selected_word_index = 0;
                             self.active_plugin_index = i;
                             self.load_active_plugin();
                         }
