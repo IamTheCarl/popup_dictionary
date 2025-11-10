@@ -33,9 +33,9 @@ impl Plugins {
             Plugins::Jujum => Box::new(
                 crate::plugins::jujum_plugin::jujum_plugin::JujumPlugin::load_plugin(sentence),
             ),
-            Plugins::Jotoba => Box::new(crate::plugins::jotoba_plugin::JotobaPlugin::load_plugin(
-                sentence,
-            )),
+            Plugins::Jotoba => Box::new(
+                crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(sentence),
+            ),
         }
     }
 }

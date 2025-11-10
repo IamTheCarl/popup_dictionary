@@ -9,11 +9,9 @@ use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
-use egui::{Color32, CornerRadius, RichText, Ui};
+use egui::{Color32, CornerRadius, RichText};
 
 use crate::plugin::{Plugin, Plugins, Token};
-use crate::plugins::jotoba_plugin::JotobaPlugin;
-use crate::plugins::jujum_plugin::jujum_plugin::JujumPlugin;
 
 pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
     // Configure native window options
@@ -53,7 +51,7 @@ impl MyApp {
         // You can load initial state here if needed
         Self::load_main_font(&cc.egui_ctx);
 
-        let mut app = Self {
+        let app = Self {
             //words: words.to_vec(),
             sentence: sentence.to_string(),
             selected_word_index: 0,
@@ -190,7 +188,7 @@ impl eframe::App for MyApp {
                         });
                     });
 
-                    ui.add_space(20.0);
+                    ui.add_space(10.0);
 
                     plugin.display_token(self, ui, &tokens[self.selected_word_index]);
                 }

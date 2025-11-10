@@ -1,4 +1,3 @@
-use curl::easy::{Easy, List};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
