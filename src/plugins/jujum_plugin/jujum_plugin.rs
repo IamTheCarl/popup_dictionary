@@ -35,7 +35,14 @@ impl Plugin for JujumPlugin {
         &self.tokens
     }
 
-    fn display_token(&self, app: &MyApp, ui: &mut Ui, token: &Token) {
+    fn display_token(
+        &self,
+        ctx: &egui::Context,
+        frame: &egui::containers::Frame,
+        app: &MyApp,
+        ui: &mut Ui,
+        token: &Token,
+    ) {
         let forms_string: String = token
             .conjugations
             .iter()

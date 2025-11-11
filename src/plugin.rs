@@ -1,4 +1,6 @@
+use egui::Context;
 use egui::Ui;
+use egui::containers::Frame;
 
 use crate::app::MyApp;
 
@@ -7,7 +9,7 @@ pub trait Plugin: Send + 'static {
     where
         Self: Sized;
     fn get_tokens(&self) -> &Vec<Token>;
-    fn display_token(&self, app: &MyApp, ui: &mut Ui, token: &Token);
+    fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token);
 }
 
 #[derive(Clone, Copy, PartialEq)]

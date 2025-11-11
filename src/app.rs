@@ -116,6 +116,42 @@ impl eframe::App for MyApp {
             shadow: egui::Shadow::NONE,
             stroke: egui::Stroke::NONE,
         };
+
+        egui::TopBottomPanel::bottom("footer")
+            .min_height(40.0)
+            .frame(custom_frame)
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    for (i, active_plugin) in self.available_plugins.iter().enumerate() {
+                        if ui
+                            .add(egui::Button::selectable(
+                                self.active_plugin_index == i,
+                                RichText::new(active_plugin.name()).size(20.0),
+                            ))
+                            .clicked()
+                        {
+                            self.selected_word_index = 0;
+                            self.active_plugin_index = i;
+                            self.load_active_plugin();
+                        }
+                    }
+
+                    /*
+                    if ui
+                        .button(RichText::new("Open in browser").size(20.0))
+                        .clicked()
+                    {
+                        ctx.open_url(egui::output::OpenUrl {
+                            url: format!(
+                                "https://jotoba.de/search/0/{}?l=en-US",
+                                get_sentence_string(&self.words)
+                            ),
+                            new_tab: true,
+                        });
+                    }*/
+                })
+            });
+
         egui::CentralPanel::default()
             .frame(custom_frame)
             .show(ctx, |ui| match &*self.plugin_state.lock().unwrap() {
@@ -190,42 +226,14 @@ impl eframe::App for MyApp {
 
                     ui.add_space(10.0);
 
-                    plugin.display_token(self, ui, &tokens[self.selected_word_index]);
+                    plugin.display_token(
+                        ctx,
+                        &custom_frame,
+                        self,
+                        ui,
+                        &tokens[self.selected_word_index],
+                    );
                 }
-            });
-        egui::TopBottomPanel::bottom("footer")
-            .min_height(40.0)
-            .frame(custom_frame)
-            .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    for (i, active_plugin) in self.available_plugins.iter().enumerate() {
-                        if ui
-                            .add(egui::Button::selectable(
-                                self.active_plugin_index == i,
-                                RichText::new(active_plugin.name()).size(20.0),
-                            ))
-                            .clicked()
-                        {
-                            self.selected_word_index = 0;
-                            self.active_plugin_index = i;
-                            self.load_active_plugin();
-                        }
-                    }
-
-                    /*
-                    if ui
-                        .button(RichText::new("Open in browser").size(20.0))
-                        .clicked()
-                    {
-                        ctx.open_url(egui::output::OpenUrl {
-                            url: format!(
-                                "https://jotoba.de/search/0/{}?l=en-US",
-                                get_sentence_string(&self.words)
-                            ),
-                            new_tab: true,
-                        });
-                    }*/
-                })
             });
     }
 }

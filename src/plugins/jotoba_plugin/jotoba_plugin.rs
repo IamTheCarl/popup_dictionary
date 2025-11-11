@@ -1,6 +1,8 @@
 use egui::Color32;
+use egui::Context;
 use egui::RichText;
 use egui::Ui;
+use egui::containers::Frame;
 use std::cell::RefCell;
 
 use crate::app::MyApp;
@@ -27,9 +29,25 @@ impl Plugin for JotobaPlugin {
         &self.tokens
     }
 
-    fn display_token(&self, app: &MyApp, ui: &mut Ui, token: &Token) {
+    fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token) {
         if token.is_valid() {
             if let Ok(response) = self.jotoba_tokenizer.borrow_mut().get_response(token) {
+                egui::TopBottomPanel::bottom("jotoba_footer")
+                    .show_separator_line(false)
+                    .frame(*frame)
+                    .show(ctx, |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(RichText::new("Open").size(20.0)).clicked() {
+                                ctx.open_url(egui::output::OpenUrl {
+                                    url: format!(
+                                        "https://jotoba.de/search/0/{}?l=en-US",
+                                        self.get_sentence_string()
+                                    ),
+                                    new_tab: true,
+                                });
+                            }
+                        });
+                    });
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
@@ -59,5 +77,15 @@ impl Plugin for JotobaPlugin {
                     });
             }
         }
+    }
+}
+
+impl JotobaPlugin {
+    fn get_sentence_string(&self) -> String {
+        let mut sentence: String = String::new();
+        for token in &self.tokens {
+            sentence.push_str(&format!("{}", token.input_word));
+        }
+        sentence
     }
 }
