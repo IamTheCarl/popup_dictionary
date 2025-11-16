@@ -2,7 +2,11 @@ use std::{env, process};
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let sentence: String = args.join("").replace(" ", "");
+    let sentence: String = args
+        .join("")
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
     if !sentence.is_empty() {
         if let Err(e) = popup_dictionary::run(&sentence) {
             eprintln!("Error: {e}");
