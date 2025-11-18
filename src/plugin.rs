@@ -1,6 +1,7 @@
 use egui::Context;
 use egui::Ui;
 use egui::containers::Frame;
+use std::time::Instant;
 
 use crate::app::MyApp;
 
@@ -31,14 +32,25 @@ impl Plugins {
     }
 
     pub fn generate(&self, sentence: &str) -> Box<dyn Plugin> {
-        match self {
+        let start = Instant::now();
+
+        let result: Box<dyn Plugin> = match self {
             Plugins::Jujum => Box::new(
                 crate::plugins::jujum_plugin::jujum_plugin::JujumPlugin::load_plugin(sentence),
             ),
             Plugins::Jotoba => Box::new(
                 crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(sentence),
             ),
-        }
+        };
+
+        let duration = start.elapsed();
+        println!(
+            "Plugin loaded in: {:.3} ms for sentence length {}",
+            duration.as_secs_f64() * 1000.0, // Convert to milliseconds
+            sentence.len()
+        );
+
+        result
     }
 }
 

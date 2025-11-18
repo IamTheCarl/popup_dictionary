@@ -1,6 +1,8 @@
+use aho_corasick::AhoCorasick;
+use aho_corasick::MatchKind;
 use curl::easy::Easy;
 use curl::easy::List;
-use egui::cache;
+use phf::phf_map;
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
@@ -8,6 +10,25 @@ use std::fmt;
 
 use crate::plugin::Token;
 use crate::plugin::Validity;
+
+const JOTOBA_SUGGESTION_MAX: usize = 37;
+const COMMON_UNKNOWNS: phf::Map<&'static str, ()> = phf_map! {
+    "は" => (),
+    "が" => (),
+    "を" => (),
+    "に" => (),
+    "で" => (),
+    "と" => (),
+    "の" => (),
+    "も" => (),
+    "や" => (),
+    "へ" => (),
+    "か" => (),
+    "よ" => (),
+    "ね" => (),
+    "な" => (),
+    "という" => ()
+};
 
 // Structure for caching
 #[derive(Clone, Debug)]
@@ -19,7 +40,7 @@ enum CachedToken {
 #[derive(Clone, Debug)]
 struct ValidToken {
     word: String,
-    response: Response,
+    response: WordsResponse,
 }
 
 impl fmt::Display for CachedToken {
@@ -31,9 +52,9 @@ impl fmt::Display for CachedToken {
     }
 }
 
-// Jotoba API Response
+// Jotoba API Words Response
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Response {
+pub struct WordsResponse {
     pub words: Vec<Word>,
 }
 
@@ -55,29 +76,176 @@ pub struct Sense {
     pub glosses: Vec<String>,
 }
 
+// Jotoba API Suggestion Response
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct SuggestionResponse {
+    suggestions: Vec<Suggestion>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Suggestion {
+    primary: String,
+    secondary: Option<String>,
+}
+
+// Easy Client
+struct Client {
+    words_easy: Easy,
+    suggestion_easy: Easy,
+}
+
+impl Client {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        let mut words_easy = Easy::new();
+        words_easy.url("https://jotoba.de/api/search/words")?;
+        words_easy.post(true)?;
+        let mut list = List::new();
+        list.append("Content-Type: application/json")?;
+        words_easy.http_headers(list)?;
+
+        let mut suggestion_easy = Easy::new();
+        suggestion_easy.url("https://jotoba.de/api/suggestion")?;
+        suggestion_easy.post(true)?;
+        let mut list = List::new();
+        list.append("Content-Type: application/json")?;
+        suggestion_easy.http_headers(list)?;
+
+        Ok(Client {
+            words_easy,
+            suggestion_easy,
+        })
+    }
+}
+
 pub struct JotobaTokenizer {
     token_cache: Vec<CachedToken>,
+    easy_client: Client,
 }
 
 impl JotobaTokenizer {
     pub fn new() -> Self {
         return Self {
             token_cache: Vec::new(),
+            easy_client: Client::new().unwrap(), // TODO: handle error
         };
     }
 
     pub fn tokenize(&mut self, sentence: &str) -> Result<Vec<Token>, Box<dyn Error>> {
-        // temporarily limit sentence length for testing and to limit calls to jotoba api (spam)
-        let sentence: String = sentence.chars().take(30).collect();
-        //TODO: use jotoba search query completion api as pre-tokenizer. will vastly improve tokenization and likely reduce calls.
+        let mut sentence_parts = Vec::new(); // (part, is_alphabetic)
+        let mut current_part = String::new();
 
-        let mut sentence: String = sentence.to_string();
-        println!("{}", sentence);
+        for c in sentence.chars() {
+            if c.is_alphabetic() {
+                current_part.push(c);
+            } else {
+                if !current_part.is_empty() {
+                    sentence_parts.push((current_part.clone(), true));
+                    current_part.clear();
+                }
+                sentence_parts.push((c.to_string(), false));
+            }
+        }
+        if !current_part.is_empty() {
+            sentence_parts.push((current_part, true));
+        }
+
+        let mut tokenized_sentence: Vec<Token> = Vec::new();
+        for (part_slice, is_alphabetic) in sentence_parts {
+            // Non-alphabetic character
+            if !is_alphabetic {
+                tokenized_sentence.push(Token {
+                    input_word: part_slice.to_owned(),
+                    deinflected_word: part_slice.to_owned(),
+                    conjugations: Vec::new(),
+                    validity: Validity::INVALID,
+                });
+                continue;
+            }
+
+            // Longer than max suggestion length, have to tokenize
+            if part_slice.chars().count() > JOTOBA_SUGGESTION_MAX {
+                let tokens = self.tokenize_sentence(&part_slice)?;
+                tokenized_sentence.extend(tokens);
+                continue;
+            }
+
+            // get jotoba suggestions and AhoCorasick left-match, tokenize non-matches
+            let suggestion_response = self.query_suggestion(&part_slice)?;
+            let suggestions = suggestion_response.suggestions;
+
+            let patterns: Vec<&str> = suggestions
+                .iter()
+                .flat_map(|s| {
+                    let mut list = vec![s.primary.as_str()];
+                    if let Some(ref sec) = s.secondary {
+                        list.push(sec.as_str());
+                    }
+                    list
+                })
+                .collect();
+
+            let ac = AhoCorasick::builder()
+                .match_kind(MatchKind::LeftmostLongest)
+                .build(patterns)?;
+
+            let mut last_end_byte = 0;
+            for mat in ac.find_iter(&part_slice) {
+                let start_byte = mat.start();
+                let end_byte = mat.end();
+
+                // non-matches inbetween matches, tokenize
+                if start_byte > last_end_byte {
+                    let unknown_slice = &part_slice[last_end_byte..start_byte];
+                    if COMMON_UNKNOWNS.contains_key(unknown_slice) {
+                        tokenized_sentence.push(Token {
+                            input_word: unknown_slice.to_owned(),
+                            deinflected_word: unknown_slice.to_owned(),
+                            conjugations: Vec::new(),
+                            validity: Validity::VALID,
+                        });
+                    } else {
+                        tokenized_sentence
+                            .extend(self.tokenize_sentence(&unknown_slice.to_string())?);
+                    }
+                }
+
+                let matched_word_slice = &part_slice[start_byte..end_byte];
+                tokenized_sentence.push(Token {
+                    input_word: matched_word_slice.to_owned(),
+                    deinflected_word: matched_word_slice.to_owned(),
+                    conjugations: Vec::new(),
+                    validity: Validity::VALID,
+                });
+
+                last_end_byte = end_byte;
+            }
+
+            // tokenize non-matches at end of sentence
+            if last_end_byte < part_slice.len() {
+                let unknown_slice = &part_slice[last_end_byte..part_slice.len()];
+                if COMMON_UNKNOWNS.contains_key(unknown_slice) {
+                    tokenized_sentence.push(Token {
+                        input_word: unknown_slice.to_owned(),
+                        deinflected_word: unknown_slice.to_owned(),
+                        conjugations: Vec::new(),
+                        validity: Validity::VALID,
+                    });
+                } else {
+                    tokenized_sentence.extend(self.tokenize_sentence(&unknown_slice.to_string())?);
+                }
+            }
+        }
+
+        Ok(tokenized_sentence)
+    }
+
+    fn tokenize_sentence(&mut self, sentence: &String) -> Result<Vec<Token>, Box<dyn Error>> {
+        let mut sentence: String = sentence.to_owned();
 
         let mut token_cache: Vec<CachedToken> = Vec::new();
         let mut previous_word: String = String::new();
         while !sentence.is_empty() {
-            let response: Response = self.query_jotoba(&sentence)?;
+            let response: WordsResponse = self.query_words(&sentence)?;
             //println!("{:?}", response);
             if response.words.len() > 0 {
                 let mut removed: bool = false;
@@ -186,7 +354,7 @@ impl JotobaTokenizer {
                 }
             }
         }
-        println!("{:?}", token_cache);
+        //println!("{:?}", token_cache);
 
         if token_cache.is_empty() {
             return Err(Box::from("No matching translation(s) found."));
@@ -227,13 +395,8 @@ impl JotobaTokenizer {
         Ok(tokens)
     }
 
-    fn query_jotoba(&self, sentence: &String) -> Result<Response, Box<dyn Error>> {
-        let mut easy = Easy::new();
-        easy.url("https://jotoba.de/api/search/words")?;
-        easy.post(true)?;
-        let mut list = List::new();
-        list.append("Content-Type: application/json")?;
-        easy.http_headers(list)?;
+    fn query_words(&mut self, sentence: &String) -> Result<WordsResponse, Box<dyn Error>> {
+        let easy = &mut self.easy_client.words_easy;
 
         let mut buf = Vec::new();
 
@@ -253,13 +416,43 @@ impl JotobaTokenizer {
             transfer.perform()?;
         }
 
-        let json: Response =
+        let json: WordsResponse =
             serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
 
         Ok(json)
     }
 
-    pub fn get_response(&mut self, token: &Token) -> Result<Response, Box<dyn Error>> {
+    fn query_suggestion(
+        &mut self,
+        sentence: &String,
+    ) -> Result<SuggestionResponse, Box<dyn Error>> {
+        let easy = &mut self.easy_client.suggestion_easy;
+
+        let mut buf = Vec::new();
+
+        let request_string: String = format!(
+            "{}{}{}",
+            r#"{"input":""#, sentence, r#"","lang":"en-US","search_type":"0"}"#
+        );
+        let request: &[u8] = request_string.as_bytes();
+        easy.post_fields_copy(request)?;
+
+        {
+            let mut transfer = easy.transfer();
+            transfer.write_function(|data| {
+                buf.extend_from_slice(data);
+                Ok(data.len())
+            })?;
+            transfer.perform()?;
+        }
+
+        let json: SuggestionResponse =
+            serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
+
+        Ok(json)
+    }
+
+    pub fn get_response(&mut self, token: &Token) -> Result<WordsResponse, Box<dyn Error>> {
         let cached_token = self
             .token_cache
             .iter()
@@ -271,7 +464,7 @@ impl JotobaTokenizer {
         match cached_token {
             Some(CachedToken::Valid(valid_token)) => Ok(valid_token.response.clone()),
             _ => {
-                let response = self.query_jotoba(&token.input_word)?;
+                let response = self.query_words(&token.input_word)?;
                 if !response.words.is_empty() {
                     self.token_cache.push(CachedToken::Valid(ValidToken {
                         word: token.input_word.to_string(),

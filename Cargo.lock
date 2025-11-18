@@ -2672,6 +2672,7 @@ dependencies = [
 name = "popup_dictionary"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "bincode",
  "curl",
  "dirs",
