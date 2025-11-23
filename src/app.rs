@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    env,
+    sync::{Arc, Mutex},
+};
 
 /*
 use crate::{
@@ -9,25 +12,155 @@ use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
-use egui::{Color32, CornerRadius, RichText};
+use egui::{Color32, CornerRadius, Pos2, RichText};
+use enigo::{Enigo, Mouse};
+
+use std::error::Error;
+
+#[cfg(feature = "hyprland-support")]
+use hyprland::prelude::*;
+#[cfg(feature = "hyprland-support")]
+use hyprland::{
+    dispatch::{self, DispatchType},
+    shared::HyprDataActive,
+};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
+fn get_optimal_window_pos(
+    window_width: f32,
+    window_height: f32,
+    is_hyprland: bool,
+) -> Result<Pos2, Box<dyn Error>> {
+    let mut cursor_pos: Pos2 = Pos2::ZERO;
+    let mut display_size: Pos2 = Pos2::ZERO;
+    let mut cursor_found: bool = false;
+    let mut display_found: bool = false;
+    'outer: {
+        #[cfg(feature = "hyprland-support")]
+        // try hyprland
+        if is_hyprland {
+            if let Ok(pos) = hyprland::data::CursorPosition::get() {
+                cursor_pos = Pos2::new(pos.x as f32, pos.y as f32);
+                cursor_found = true;
+            }
+            if let Ok(monitor) = hyprland::data::Monitor::get_active() {
+                display_size = Pos2::new(
+                    (monitor.width as i32 + monitor.x) as f32,
+                    (monitor.height as i32 + monitor.y) as f32,
+                );
+                display_found = true;
+            }
+            if cursor_found && display_found {
+                break 'outer;
+            }
+        }
+        println!("{} | {}", cursor_pos, display_size);
+
+        // try x11/wayland/windows/macos
+        // this can report wrong values, so make sure not to overwrite previous good values using cursor_found and display_found
+        let enigo = Enigo::new(&enigo::Settings::default()).unwrap();
+        if !cursor_found {
+            if let Ok((x, y)) = enigo.location() {
+                cursor_pos = Pos2::new(x as f32, y as f32);
+                cursor_found = true;
+            }
+        }
+        if !display_found {
+            if let Ok((x, y)) = enigo.main_display() {
+                display_size = Pos2::new(x as f32, y as f32);
+                display_found = true;
+            }
+        }
+
+        println!("{} | {}", cursor_pos, display_size);
+        if cursor_found && display_found {
+            break 'outer;
+        }
+
+        // try xwayland workaround
+        let mut settings = enigo::Settings::default();
+
+        settings.wayland_display = Some(":0".to_string());
+        let enigo = Enigo::new(&settings).unwrap();
+        if !cursor_found {
+            if let Ok((x, y)) = enigo.location() {
+                cursor_pos = Pos2::new(x as f32, y as f32);
+                cursor_found = true;
+            }
+        }
+        if !display_found {
+            if let Ok((x, y)) = enigo.main_display() {
+                display_size = Pos2::new(x as f32, y as f32);
+                display_found = true;
+            }
+        }
+        println!("{} | {}", cursor_pos, display_size);
+    }
+
+    println!("{} | {}", cursor_pos, display_size);
+    if cursor_found && display_found {
+        if display_size.x >= cursor_pos.x && display_size.y >= cursor_pos.y {
+            let mut window_x = cursor_pos.x;
+            let mut window_y = cursor_pos.y;
+
+            if window_x + window_width > display_size.x {
+                window_x -= window_width;
+            }
+
+            if window_y + window_height > display_size.y {
+                window_y -= window_height;
+            }
+
+            return Ok(Pos2::new(window_x, window_y));
+        } else {
+            return Err(Box::from(
+                "Couldn't find valid cursor position and/or display size.",
+            ));
+        }
+    } else {
+        return Err(Box::from(
+            "Couldn't find valid cursor position and/or display size.",
+        ));
+    }
+}
+
 pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
+    let mut start_pos: Option<Pos2> = None;
+
+    let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+
+    let options;
+    if let Ok(optimal_pos) = get_optimal_window_pos(450.0, 450.0, is_hyprland) {
+        start_pos = Some(optimal_pos);
+
+        println!("start_pos: {}, {}", optimal_pos.x, optimal_pos.y);
+        options = NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_position(optimal_pos)
+                .with_inner_size([450.0, 450.0]) // Initial window size
+                .with_min_inner_size([450.0, 450.0]) // Minimum window size
+                .with_title("Popup Dictionary"), // Window title
+            ..Default::default()
+        };
+    } else {
+        println!("mouse not found");
+        options = NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([450.0, 450.0]) // Initial window size
+                .with_min_inner_size([450.0, 450.0]) // Minimum window size
+                .with_title("Popup Dictionary"), // Window title
+            ..Default::default()
+        };
+    }
+
     // Configure native window options
-    let options = NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([320.0, 240.0]) // Initial window size
-            .with_min_inner_size([320.0, 240.0]) // Minimum window size
-            .with_title("Popup Dictionary"), // Window title
-        ..Default::default()
-    };
 
     // Run the eframe application
     eframe::run_native(
         "Popup Dictionary", // The name of your application
         options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(cc, sentence)))),
+        Box::new(|cc| Ok(Box::new(MyApp::new(cc, start_pos, is_hyprland, sentence)))),
     )
 }
 
@@ -37,6 +170,8 @@ enum PluginState {
 }
 
 pub struct MyApp {
+    start_pos: Option<Pos2>,
+    is_hyprland: bool,
     //words: Vec<ParsedWord>,
     sentence: String,
     selected_word_index: usize,
@@ -47,11 +182,18 @@ pub struct MyApp {
 }
 
 impl MyApp {
-    fn new(cc: &eframe::CreationContext<'_>, sentence: &str) -> Self {
+    fn new(
+        cc: &eframe::CreationContext<'_>,
+        start_pos: Option<Pos2>,
+        is_hyprland: bool,
+        sentence: &str,
+    ) -> Self {
         // You can load initial state here if needed
         Self::load_main_font(&cc.egui_ctx);
 
         let app = Self {
+            start_pos,
+            is_hyprland,
             //words: words.to_vec(),
             sentence: sentence.to_string(),
             selected_word_index: 0,
@@ -98,6 +240,34 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(start_pos) = self.start_pos {
+            if self.is_hyprland {
+                #[cfg(feature = "hyprland-support")]
+                {
+                    let window_id = dispatch::WindowIdentifier::Title("Popup Dictionary");
+                    if hyprland::dispatch::Dispatch::call(DispatchType::ResizeWindowPixel(
+                        dispatch::Position::Exact(450, 450),
+                        window_id.to_owned(),
+                    ))
+                    .is_ok()
+                        && hyprland::dispatch::Dispatch::call(DispatchType::MoveWindowPixel(
+                            hyprland::dispatch::Position::Exact(
+                                start_pos.x as i16,
+                                start_pos.y as i16,
+                            ),
+                            window_id,
+                        ))
+                        .is_ok()
+                    {
+                        self.start_pos = None;
+                    }
+                }
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(start_pos));
+                self.start_pos = None;
+            }
+        }
+
         let custom_frame = egui::containers::Frame {
             corner_radius: CornerRadius::ZERO,
             fill: Color32::from_rgb(27, 28, 29),

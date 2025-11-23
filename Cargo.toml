@@ -15,3 +15,12 @@ bincode = "2.0.1"
 dirs = "6.0.0"
 phf = { version = "0.13.1", features = ["macros"] }
 aho-corasick = "1.1.4"
+enigo = { version = "0.6.1", features = ["wayland"] }
+hyprland = { version = "0.4.0-beta.3", optional = true }
+
+[target."cfg(target_os = \"linux\")"]
+hyprland = "0.4.0-beta.3"
+
+[features]
+default = []
+hyprland-support = ["dep:hyprland"]
