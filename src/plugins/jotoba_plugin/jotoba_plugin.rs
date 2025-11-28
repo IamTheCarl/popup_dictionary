@@ -12,13 +12,13 @@ use crate::plugins::jotoba_plugin::jotoba_tokenizer::JotobaTokenizer;
 
 pub struct JotobaPlugin {
     tokens: Vec<Token>,
-    jotoba_tokenizer: RefCell<JotobaTokenizer>, // REMVOE THIS REFCELL WHEN POSSIBLE
+    jotoba_tokenizer: RefCell<JotobaTokenizer>, // TODO: REMVOE THIS REFCELL WHEN POSSIBLE
 }
 
 impl Plugin for JotobaPlugin {
     fn load_plugin(sentence: &str) -> Self {
-        let mut jotoba_tokenizer = JotobaTokenizer::new();
-        let tokens = jotoba_tokenizer.tokenize(sentence).unwrap();
+        let mut jotoba_tokenizer: JotobaTokenizer = JotobaTokenizer::new();
+        let tokens: Vec<Token> = jotoba_tokenizer.tokenize(sentence).unwrap();
         Self {
             tokens,
             jotoba_tokenizer: RefCell::from(jotoba_tokenizer),
@@ -82,10 +82,10 @@ impl Plugin for JotobaPlugin {
 
 impl JotobaPlugin {
     fn get_sentence_string(&self) -> String {
-        let mut sentence: String = String::new();
-        for token in &self.tokens {
-            sentence.push_str(&format!("{}", token.input_word));
-        }
-        sentence
+        self.tokens
+            .iter()
+            .map(|token| token.input_word.to_owned())
+            .collect::<Vec<String>>()
+            .join("")
     }
 }

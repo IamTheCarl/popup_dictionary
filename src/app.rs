@@ -1,181 +1,174 @@
-use std::{
-    env,
-    sync::{Arc, Mutex},
-};
-
-/*
-use crate::{
-    dictionary::{Dictionary, DictionaryEntry, DictionaryTerm, Furigana},
-    tokenizer::ParsedWord,
-};*/
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
-use egui::{Color32, CornerRadius, Pos2, RichText};
-use enigo::{Enigo, Mouse};
-
+use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
+use enigo::{Enigo, Mouse, Settings};
+use log::warn;
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "hyprland-support")]
 use hyprland::prelude::*;
-#[cfg(feature = "hyprland-support")]
-use hyprland::{
-    dispatch::{self, DispatchType},
-    shared::HyprDataActive,
-};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
-fn get_optimal_window_pos(
-    window_width: f32,
-    window_height: f32,
-    is_hyprland: bool,
+const WINDOW_INIT_WIDTH: f32 = 450.0;
+const WINDOW_INIT_HEIGHT: f32 = 450.0;
+const APP_NAME: &str = "Popup Dictionary";
+
+pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
+    #[cfg(feature = "hyprland-support")]
+    let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+
+    let mut init_pos: Option<Pos2> = None;
+    let options: NativeOptions;
+    match get_optimal_init_pos(
+        #[cfg(feature = "hyprland-support")]
+        is_hyprland,
+    ) {
+        Ok(optimal_pos) => {
+            init_pos = Some(optimal_pos);
+
+            options = NativeOptions {
+                viewport: egui::ViewportBuilder::default()
+                    .with_position(optimal_pos)
+                    .with_inner_size([WINDOW_INIT_WIDTH, WINDOW_INIT_HEIGHT])
+                    .with_min_inner_size([100.0, 100.0])
+                    .with_title(APP_NAME),
+                ..Default::default()
+            };
+        }
+        Err(e) => {
+            warn!("Failed to get optimal init pos with error: {:?}", e);
+            options = NativeOptions {
+                viewport: egui::ViewportBuilder::default()
+                    .with_inner_size([WINDOW_INIT_WIDTH, WINDOW_INIT_HEIGHT])
+                    .with_min_inner_size([100.0, 100.0])
+                    .with_title(APP_NAME),
+                ..Default::default()
+            };
+        }
+    }
+
+    eframe::run_native(
+        APP_NAME,
+        options,
+        Box::new(|cc| {
+            Ok(Box::new(MyApp::new(
+                cc,
+                init_pos,
+                #[cfg(feature = "hyprland-support")]
+                is_hyprland,
+                sentence,
+            )))
+        }),
+    )
+}
+
+fn get_optimal_init_pos(
+    #[cfg(feature = "hyprland-support")] is_hyprland: bool,
 ) -> Result<Pos2, Box<dyn Error>> {
-    let mut cursor_pos: Pos2 = Pos2::ZERO;
-    let mut display_size: Pos2 = Pos2::ZERO;
-    let mut cursor_found: bool = false;
-    let mut display_found: bool = false;
+    let mut cursor_pos: Option<Pos2> = None;
+    let mut display_size: Option<Pos2> = None;
     'outer: {
         #[cfg(feature = "hyprland-support")]
-        // try hyprland
         if is_hyprland {
-            if let Ok(pos) = hyprland::data::CursorPosition::get() {
-                cursor_pos = Pos2::new(pos.x as f32, pos.y as f32);
-                cursor_found = true;
+            use hyprland::data::{CursorPosition, Monitor};
+
+            if let Ok(pos) = CursorPosition::get() {
+                cursor_pos = Some(Pos2::new(pos.x as f32, pos.y as f32));
             }
-            if let Ok(monitor) = hyprland::data::Monitor::get_active() {
-                display_size = Pos2::new(
+            if let Ok(monitor) = Monitor::get_active() {
+                display_size = Some(Pos2::new(
                     (monitor.width as i32 + monitor.x) as f32,
                     (monitor.height as i32 + monitor.y) as f32,
-                );
-                display_found = true;
+                ));
             }
-            if cursor_found && display_found {
+
+            if cursor_pos.is_some() && display_size.is_some() {
                 break 'outer;
             }
         }
-        println!("{} | {}", cursor_pos, display_size);
 
         // try x11/wayland/windows/macos
-        // this can report wrong values, so make sure not to overwrite previous good values using cursor_found and display_found
-        let enigo = Enigo::new(&enigo::Settings::default()).unwrap();
-        if !cursor_found {
+        // this can report wrong values, so making sure not to overwrite previous good values
+        let enigo: Enigo = Enigo::new(&Settings::default())?;
+        if cursor_pos.is_none() {
             if let Ok((x, y)) = enigo.location() {
-                cursor_pos = Pos2::new(x as f32, y as f32);
-                cursor_found = true;
+                cursor_pos = Some(Pos2::new(x as f32, y as f32));
             }
         }
-        if !display_found {
+        if !display_size.is_none() {
             if let Ok((x, y)) = enigo.main_display() {
-                display_size = Pos2::new(x as f32, y as f32);
-                display_found = true;
+                display_size = Some(Pos2::new(x as f32, y as f32));
             }
         }
 
-        println!("{} | {}", cursor_pos, display_size);
-        if cursor_found && display_found {
+        if cursor_pos.is_some() && display_size.is_some() {
             break 'outer;
         }
 
-        // try xwayland workaround
-        let mut settings = enigo::Settings::default();
-
-        settings.wayland_display = Some(":0".to_string());
-        let enigo = Enigo::new(&settings).unwrap();
-        if !cursor_found {
-            if let Ok((x, y)) = enigo.location() {
-                cursor_pos = Pos2::new(x as f32, y as f32);
-                cursor_found = true;
+        #[cfg(feature = "wayland-support")]
+        {
+            // try xwayland workaround
+            let mut settings: Settings = Settings::default();
+            settings.wayland_display = Some(":0".to_string());
+            let enigo: Enigo = Enigo::new(&settings)?;
+            if cursor_pos.is_none() {
+                if let Ok((x, y)) = enigo.location() {
+                    cursor_pos = Some(Pos2::new(x as f32, y as f32));
+                }
+            }
+            if !display_size.is_none() {
+                if let Ok((x, y)) = enigo.main_display() {
+                    display_size = Some(Pos2::new(x as f32, y as f32));
+                }
             }
         }
-        if !display_found {
-            if let Ok((x, y)) = enigo.main_display() {
-                display_size = Pos2::new(x as f32, y as f32);
-                display_found = true;
-            }
-        }
-        println!("{} | {}", cursor_pos, display_size);
     }
 
-    println!("{} | {}", cursor_pos, display_size);
-    if cursor_found && display_found {
+    if let Some(cursor_pos) = cursor_pos
+        && let Some(display_size) = display_size
+    {
         if display_size.x >= cursor_pos.x && display_size.y >= cursor_pos.y {
-            let mut window_x = cursor_pos.x;
-            let mut window_y = cursor_pos.y;
+            let mut window_x: f32 = cursor_pos.x;
+            let mut window_y: f32 = cursor_pos.y;
 
-            if window_x + window_width > display_size.x {
-                window_x -= window_width;
+            if window_x + WINDOW_INIT_WIDTH > display_size.x {
+                window_x -= WINDOW_INIT_WIDTH;
             }
 
-            if window_y + window_height > display_size.y {
-                window_y -= window_height;
+            if window_y + WINDOW_INIT_HEIGHT > display_size.y {
+                window_y -= WINDOW_INIT_HEIGHT;
             }
 
             return Ok(Pos2::new(window_x, window_y));
         } else {
-            return Err(Box::from(
-                "Couldn't find valid cursor position and/or display size.",
-            ));
+            return Err(Box::from(format!(
+                "Cursor position ({}, {}) outside display bounds ({}, {}).",
+                cursor_pos.x, cursor_pos.y, display_size.x, display_size.y
+            )));
         }
     } else {
         return Err(Box::from(
-            "Couldn't find valid cursor position and/or display size.",
+            "No valid cursor position and/or display size found.",
         ));
     }
 }
 
-pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
-    let mut start_pos: Option<Pos2> = None;
-
-    let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
-
-    let options;
-    if let Ok(optimal_pos) = get_optimal_window_pos(450.0, 450.0, is_hyprland) {
-        start_pos = Some(optimal_pos);
-
-        println!("start_pos: {}, {}", optimal_pos.x, optimal_pos.y);
-        options = NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_position(optimal_pos)
-                .with_inner_size([450.0, 450.0]) // Initial window size
-                .with_min_inner_size([450.0, 450.0]) // Minimum window size
-                .with_title("Popup Dictionary"), // Window title
-            ..Default::default()
-        };
-    } else {
-        println!("mouse not found");
-        options = NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([450.0, 450.0]) // Initial window size
-                .with_min_inner_size([450.0, 450.0]) // Minimum window size
-                .with_title("Popup Dictionary"), // Window title
-            ..Default::default()
-        };
-    }
-
-    // Configure native window options
-
-    // Run the eframe application
-    eframe::run_native(
-        "Popup Dictionary", // The name of your application
-        options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(cc, start_pos, is_hyprland, sentence)))),
-    )
-}
-
 enum PluginState {
+    Initial,
     Loading,
     Ready(Box<dyn Plugin>),
 }
 
 pub struct MyApp {
-    start_pos: Option<Pos2>,
+    init_pos: Option<Pos2>,
+    #[cfg(feature = "hyprland-support")]
     is_hyprland: bool,
-    //words: Vec<ParsedWord>,
     sentence: String,
     selected_word_index: usize,
-    //dictionary: Dictionary,
     plugin_state: Arc<Mutex<PluginState>>,
     available_plugins: Vec<Plugins>,
     active_plugin_index: usize,
@@ -184,34 +177,35 @@ pub struct MyApp {
 impl MyApp {
     fn new(
         cc: &eframe::CreationContext<'_>,
-        start_pos: Option<Pos2>,
-        is_hyprland: bool,
+        init_pos: Option<Pos2>,
+        #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
-        // You can load initial state here if needed
         Self::load_main_font(&cc.egui_ctx);
 
-        let app = Self {
-            start_pos,
+        let mut app = Self {
+            init_pos,
+            #[cfg(feature = "hyprland-support")]
             is_hyprland,
-            //words: words.to_vec(),
             sentence: sentence.to_string(),
             selected_word_index: 0,
-            //dictionary: dictionary.clone(),
-            plugin_state: Arc::new(Mutex::new(PluginState::Loading)),
+            plugin_state: Arc::new(Mutex::new(PluginState::Initial)),
             available_plugins: Plugins::all(),
             active_plugin_index: 0,
         };
 
-        app.load_active_plugin();
+        app.try_load_plugin(0);
 
         app
     }
 
-    fn load_main_font(ctx: &egui::Context) {
+    fn load_main_font(ctx: &Context) {
         ctx.add_font(FontInsert::new(
             "NotoSansCJKJP",
+            #[cfg(not(target_os = "windows"))]
             egui::FontData::from_static(include_bytes!("./fonts/popup_font.ttc")), // Currently: Noto Sans CJK JP
+            #[cfg(target_os = "windows")]
+            egui::FontData::from_static(include_bytes!(".\\fonts\\popup_font.ttc")), // Currently: Noto Sans CJK JP
             vec![
                 InsertFontFamily {
                     family: egui::FontFamily::Proportional,
@@ -225,50 +219,76 @@ impl MyApp {
         ));
     }
 
-    fn load_active_plugin(&self) {
-        let state_clone = self.plugin_state.clone();
-        *state_clone.lock().unwrap() = PluginState::Loading;
+    fn try_load_plugin(&mut self, plugin_index: usize) {
+        if plugin_index >= self.available_plugins.len() {
+            return;
+        }
 
-        let active_plugin = self.available_plugins[self.active_plugin_index];
-        let plugin_sentence = String::from(&self.sentence);
+        let state_clone: Arc<Mutex<PluginState>> = Arc::clone(&self.plugin_state);
+        {
+            let mut state = state_clone.lock().unwrap();
+            match *state {
+                PluginState::Loading => {
+                    return;
+                }
+                PluginState::Ready(_) => {
+                    if self.active_plugin_index == plugin_index {
+                        return;
+                    }
+                    *state = PluginState::Loading;
+                }
+                _ => {
+                    *state = PluginState::Loading;
+                }
+            }
+        }
+
+        let active_plugin: Plugins = self.available_plugins[plugin_index];
+        let plugin_sentence: String = self.sentence.to_owned();
         std::thread::spawn(move || {
-            let plugin = active_plugin.generate(&plugin_sentence);
+            // TODO: Implement error handling, logging?
+            let plugin: Box<dyn Plugin> = active_plugin.generate(&plugin_sentence);
             *state_clone.lock().unwrap() = PluginState::Ready(plugin);
         });
+
+        self.selected_word_index = 0;
+        self.active_plugin_index = plugin_index;
     }
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Some(start_pos) = self.start_pos {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if let Some(init_pos) = self.init_pos {
+            #[cfg(feature = "hyprland-support")]
             if self.is_hyprland {
-                #[cfg(feature = "hyprland-support")]
                 {
-                    let window_id = dispatch::WindowIdentifier::Title("Popup Dictionary");
-                    if hyprland::dispatch::Dispatch::call(DispatchType::ResizeWindowPixel(
-                        dispatch::Position::Exact(450, 450),
+                    use hyprland::dispatch::{Dispatch, DispatchType, Position, WindowIdentifier};
+
+                    let window_id: WindowIdentifier<'_> = WindowIdentifier::Title(APP_NAME);
+                    if Dispatch::call(DispatchType::ResizeWindowPixel(
+                        Position::Exact(WINDOW_INIT_WIDTH as i16, WINDOW_INIT_HEIGHT as i16),
                         window_id.to_owned(),
                     ))
                     .is_ok()
-                        && hyprland::dispatch::Dispatch::call(DispatchType::MoveWindowPixel(
-                            hyprland::dispatch::Position::Exact(
-                                start_pos.x as i16,
-                                start_pos.y as i16,
-                            ),
+                        && Dispatch::call(DispatchType::MoveWindowPixel(
+                            Position::Exact(init_pos.x as i16, init_pos.y as i16),
                             window_id,
                         ))
                         .is_ok()
                     {
-                        self.start_pos = None;
+                        self.init_pos = None;
                     }
                 }
-            } else {
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(start_pos));
-                self.start_pos = None;
+            }
+
+            #[cfg(not(feature = "hyprland-support"))]
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(init_pos));
+                self.init_pos = None;
             }
         }
 
-        let custom_frame = egui::containers::Frame {
+        let main_frame = egui::containers::Frame {
             corner_radius: CornerRadius::ZERO,
             fill: Color32::from_rgb(27, 28, 29),
             inner_margin: egui::Margin {
@@ -287,72 +307,50 @@ impl eframe::App for MyApp {
             stroke: egui::Stroke::NONE,
         };
 
-        egui::TopBottomPanel::bottom("footer")
+        egui::TopBottomPanel::bottom("plugins_footer")
             .min_height(40.0)
-            .frame(custom_frame)
+            .frame(main_frame)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    for (i, active_plugin) in self.available_plugins.iter().enumerate() {
+                    let mut clicked_idx: Option<usize> = None;
+                    for (idx, active_plugin) in self.available_plugins.iter().enumerate() {
                         if ui
                             .add(egui::Button::selectable(
-                                self.active_plugin_index == i,
+                                self.active_plugin_index == idx,
                                 RichText::new(active_plugin.name()).size(20.0),
                             ))
                             .clicked()
                         {
-                            self.selected_word_index = 0;
-                            self.active_plugin_index = i;
-                            self.load_active_plugin();
+                            clicked_idx = Some(idx);
                         }
                     }
-
-                    /*
-                    if ui
-                        .button(RichText::new("Open in browser").size(20.0))
-                        .clicked()
-                    {
-                        ctx.open_url(egui::output::OpenUrl {
-                            url: format!(
-                                "https://jotoba.de/search/0/{}?l=en-US",
-                                get_sentence_string(&self.words)
-                            ),
-                            new_tab: true,
-                        });
-                    }*/
-                })
+                    if let Some(idx) = clicked_idx {
+                        self.try_load_plugin(idx);
+                    }
+                });
             });
 
         egui::CentralPanel::default()
-            .frame(custom_frame)
-            .show(ctx, |ui| match &*self.plugin_state.lock().unwrap() {
-                PluginState::Loading => {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(ui.available_height() / 2.0 - 20.0);
-                        ui.spinner();
-                        ui.add(egui::Label::new(
-                            RichText::new("Loading Plugin...").size(20.0),
-                        ));
-                    });
-                    ctx.request_repaint();
-                }
+            .frame(main_frame)
+            .show(ctx, |ui| match &(*self.plugin_state.lock().unwrap()) {
                 PluginState::Ready(plugin) => {
                     let tokens: &Vec<Token> = plugin.get_tokens();
                     ui.horizontal_top(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
                             ui.set_min_height(42.0);
 
-                            for (index, word) in tokens.iter().enumerate() {
+                            for (idx, token) in tokens.iter().enumerate() {
                                 let font_size: f32 = 20.0;
                                 let mut label_text: RichText =
-                                    RichText::new(format!("{}", word.input_word)).size(font_size);
-                                if word.is_valid() {
+                                    RichText::new(&token.input_word).size(font_size);
+                                if token.is_valid() {
                                     label_text = label_text.underline().color(Color32::GRAY);
-                                    if index == self.selected_word_index {
+                                    if idx == self.selected_word_index {
                                         label_text = label_text.color(Color32::WHITE);
                                     }
 
                                     let text_size: egui::Vec2 = {
-                                        let temp_galley = ui.fonts_mut(|f| {
+                                        let temp_galley: Arc<egui::Galley> = ui.fonts_mut(|f| {
                                             f.layout_no_wrap(
                                                 label_text.text().to_string(),
                                                 egui::FontId::proportional(font_size),
@@ -363,10 +361,8 @@ impl eframe::App for MyApp {
                                     };
                                     let (background_rect, _) =
                                         ui.allocate_exact_size(text_size, egui::Sense::hover());
-                                    let label_rect = egui::Rect::from_center_size(
-                                        background_rect.center(),
-                                        text_size,
-                                    );
+                                    let label_rect: Rect =
+                                        Rect::from_center_size(background_rect.center(), text_size);
 
                                     let response = ui
                                         .scope_builder(
@@ -376,19 +372,17 @@ impl eframe::App for MyApp {
                                         .inner;
                                     if response.hovered() {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                                    }
-                                    if response.hovered() {
                                         ui.painter().rect_filled(
                                             background_rect,
-                                            egui::CornerRadius::same(4),
+                                            CornerRadius::same(4),
                                             Color32::from_rgba_premultiplied(40, 40, 40, 40),
                                         );
                                     }
                                     if response.clicked() {
-                                        self.selected_word_index = index;
+                                        self.selected_word_index = idx;
                                     }
                                 } else {
-                                    ui.label(label_text.clone());
+                                    ui.label(label_text);
                                 }
                             }
                         });
@@ -398,22 +392,22 @@ impl eframe::App for MyApp {
 
                     plugin.display_token(
                         ctx,
-                        &custom_frame,
+                        &main_frame,
                         self,
                         ui,
                         &tokens[self.selected_word_index],
                     );
                 }
+                _ => {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(ui.available_height() / 2.0 - 20.0);
+                        ui.spinner();
+                        ui.add(egui::Label::new(
+                            RichText::new("Loading Plugin...").size(20.0),
+                        ));
+                    });
+                    ctx.request_repaint();
+                }
             });
     }
 }
-
-/*
-fn get_sentence_string(words: &Vec<ParsedWord>) -> String {
-    let mut sentence: String = String::new();
-    for word in words {
-        sentence.push_str(&format!("{}", word.surface));
-    }
-    sentence
-}
-*/

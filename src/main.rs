@@ -1,9 +1,13 @@
-use std::{
-    env,
-    process::{self, Command},
-};
+use std::{env, process};
 
 fn main() {
+    #[cfg(debug_assertions)]
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+    #[cfg(not(debug_assertions))]
+    env_logger::init();
+
     let args: Vec<String> = env::args().skip(1).collect();
 
     let sentence: String = args
@@ -13,45 +17,9 @@ fn main() {
         .collect();
 
     if sentence.starts_with("--copy") || sentence.starts_with("-c") {
-        use arboard::Clipboard;
-        use enigo::{Enigo, Keyboard};
-
-        // send Ctrl+C (twice as workaround for not always registering)
-        let mut enigo = Enigo::new(&enigo::Settings::default()).unwrap();
-        enigo.set_delay(100);
-        enigo
-            .key(enigo::Key::Control, enigo::Direction::Press)
-            .unwrap();
-        enigo
-            .key(enigo::Key::Unicode('c'), enigo::Direction::Click)
-            .unwrap();
-        std::thread::sleep(core::time::Duration::from_millis(100));
-        enigo
-            .key(enigo::Key::Control, enigo::Direction::Release)
-            .unwrap();
-        std::thread::sleep(core::time::Duration::from_millis(100));
-        enigo
-            .key(enigo::Key::Control, enigo::Direction::Press)
-            .unwrap();
-        enigo
-            .key(enigo::Key::Unicode('c'), enigo::Direction::Click)
-            .unwrap();
-        std::thread::sleep(core::time::Duration::from_millis(100));
-        enigo
-            .key(enigo::Key::Control, enigo::Direction::Release)
-            .unwrap();
-        std::thread::sleep(core::time::Duration::from_millis(100));
-
-        println!("creating clipboard");
-        if let Ok(mut clipboard) = Clipboard::new() {
-            println!("getting text");
-            if let Ok(sentence) = clipboard.get().text() {
-                println!("Clipboard content: {}", sentence);
-                if let Err(e) = popup_dictionary::run(&sentence) {
-                    eprintln!("Error: {e}");
-                    process::exit(1);
-                }
-            }
+        if let Err(e) = popup_dictionary::copy() {
+            eprintln!("Error: {e}");
+            process::exit(1);
         }
     } else if !sentence.is_empty() {
         if let Err(e) = popup_dictionary::run(&sentence) {

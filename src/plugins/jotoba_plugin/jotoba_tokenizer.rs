@@ -246,12 +246,10 @@ impl JotobaTokenizer {
         let mut previous_word: String = String::new();
         while !sentence.is_empty() {
             let response: WordsResponse = self.query_words(&sentence)?;
-            //println!("{:?}", response);
             if response.words.len() > 0 {
                 let mut removed: bool = false;
 
                 for word in &response.words {
-                    //println!("{:?}", word.reading.kanji);
                     if let Some(kanji) = &word.reading.kanji {
                         if let Some(remainder) = sentence.strip_prefix(kanji) {
                             let remainder_owned: String = remainder.to_string();
@@ -268,7 +266,6 @@ impl JotobaTokenizer {
                 }
 
                 if !removed {
-                    //println!("{}", response.words[0].reading.kana);
                     if let Some(remainder) = sentence.strip_prefix(&response.words[0].reading.kana)
                     {
                         let remainder_owned: String = remainder.to_string();
@@ -319,14 +316,13 @@ impl JotobaTokenizer {
                     {
                         parsed_word.word = previous_word.clone();
                     } else {
+                        // outdated comment (TODO: recheck logic):
                         // This can occur when jotoba gives a response to a word but the input word itself is different.
                         // For example, when a typo happens: Input word = ユーザ but the correct spelling and jotoba response is ユーザー.
-                        // This makes
                         return Err(Box::from("Logical error in previous_word."));
                     }
                     previous_word.clear();
                 }
-                //println!("{}", removed);
             } else {
                 if let Some(first_char) = sentence.chars().next() {
                     let char_len: usize = first_char.len_utf8();
@@ -354,7 +350,6 @@ impl JotobaTokenizer {
                 }
             }
         }
-        //println!("{:?}", token_cache);
 
         if token_cache.is_empty() {
             return Err(Box::from("No matching translation(s) found."));
@@ -386,20 +381,13 @@ impl JotobaTokenizer {
 
         self.token_cache = token_cache;
 
-        // words vector is now populated. query still contains the full sentence.
-        // TODO: rework above code to also store wrong words/symbols in the words vector.
-        // have it be a datatype that stores info on whether it's wrong or not.
-        // if it's wrong, GUI can handle it that way.
-        // if it's right, it has the Response stored, so GUI can use it on change to that word without having to re-request from server.
-
         Ok(tokens)
     }
 
     fn query_words(&mut self, sentence: &String) -> Result<WordsResponse, Box<dyn Error>> {
-        let easy = &mut self.easy_client.words_easy;
+        let easy: &mut Easy = &mut self.easy_client.words_easy;
 
-        let mut buf = Vec::new();
-
+        let mut buf: Vec<u8> = Vec::new();
         let request_string: String = format!(
             "{}{}{}",
             r#"{"query":""#, sentence, r#"","language":"English"}"#
@@ -416,8 +404,7 @@ impl JotobaTokenizer {
             transfer.perform()?;
         }
 
-        let json: WordsResponse =
-            serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
+        let json: WordsResponse = serde_json::from_str(String::from_utf8(buf.to_vec())?.as_str())?;
 
         Ok(json)
     }
@@ -426,9 +413,9 @@ impl JotobaTokenizer {
         &mut self,
         sentence: &String,
     ) -> Result<SuggestionResponse, Box<dyn Error>> {
-        let easy = &mut self.easy_client.suggestion_easy;
+        let easy: &mut Easy = &mut self.easy_client.suggestion_easy;
 
-        let mut buf = Vec::new();
+        let mut buf: Vec<u8> = Vec::new();
 
         let request_string: String = format!(
             "{}{}{}",
@@ -447,19 +434,19 @@ impl JotobaTokenizer {
         }
 
         let json: SuggestionResponse =
-            serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).unwrap();
+            serde_json::from_str(String::from_utf8(buf.to_vec())?.as_str())?;
 
         Ok(json)
     }
 
     pub fn get_response(&mut self, token: &Token) -> Result<WordsResponse, Box<dyn Error>> {
-        let cached_token = self
-            .token_cache
-            .iter()
-            .find(|cached_token| match cached_token {
-                CachedToken::Valid(valid_token) => valid_token.word == token.input_word,
-                CachedToken::Invalid(_) => false,
-            });
+        let cached_token: Option<&CachedToken> =
+            self.token_cache
+                .iter()
+                .find(|cached_token| match cached_token {
+                    CachedToken::Valid(valid_token) => valid_token.word == token.input_word,
+                    CachedToken::Invalid(_) => false,
+                });
 
         match cached_token {
             Some(CachedToken::Valid(valid_token)) => Ok(valid_token.response.clone()),

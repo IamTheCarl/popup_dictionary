@@ -1,7 +1,7 @@
-use egui::Context;
-use egui::Ui;
 use egui::containers::Frame;
-use std::time::Instant;
+use egui::{Context, Ui};
+use log::debug;
+use std::time::{Duration, Instant};
 
 use crate::app::MyApp;
 
@@ -32,7 +32,7 @@ impl Plugins {
     }
 
     pub fn generate(&self, sentence: &str) -> Box<dyn Plugin> {
-        let start = Instant::now();
+        let start: Instant = Instant::now();
 
         let result: Box<dyn Plugin> = match self {
             Plugins::Jujum => Box::new(
@@ -43,10 +43,10 @@ impl Plugins {
             ),
         };
 
-        let duration = start.elapsed();
-        println!(
+        let duration: Duration = start.elapsed();
+        debug!(
             "Plugin loaded in: {:.3} ms for sentence length {}",
-            duration.as_secs_f64() * 1000.0, // Convert to milliseconds
+            duration.as_secs_f64() * 1000.0,
             sentence.len()
         );
 
