@@ -4,7 +4,7 @@ use eframe::{
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
 use enigo::{Enigo, Mouse, Settings};
-use log::warn;
+use log::{error, warn};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +15,7 @@ use crate::plugin::{Plugin, Plugins, Token};
 
 const WINDOW_INIT_WIDTH: f32 = 450.0;
 const WINDOW_INIT_HEIGHT: f32 = 450.0;
-const APP_NAME: &str = "Popup Dictionary";
+pub const APP_NAME: &str = "Popup Dictionary";
 
 pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
@@ -91,7 +91,8 @@ fn get_optimal_init_pos(
             }
         }
 
-        // try x11/wayland/windows/macos
+        // try x11/windows/macos
+        // wayland unlikely to work
         // this can report wrong values, so making sure not to overwrite previous good values
         let enigo: Enigo = Enigo::new(&Settings::default())?;
         if cursor_pos.is_none() {
@@ -99,11 +100,12 @@ fn get_optimal_init_pos(
                 cursor_pos = Some(Pos2::new(x as f32, y as f32));
             }
         }
-        if !display_size.is_none() {
+        if display_size.is_none() {
             if let Ok((x, y)) = enigo.main_display() {
                 display_size = Some(Pos2::new(x as f32, y as f32));
             }
         }
+        println!("position: {:?}, display: {:?}", cursor_pos, display_size);
 
         if cursor_pos.is_some() && display_size.is_some() {
             break 'outer;
@@ -120,7 +122,7 @@ fn get_optimal_init_pos(
                     cursor_pos = Some(Pos2::new(x as f32, y as f32));
                 }
             }
-            if !display_size.is_none() {
+            if display_size.is_none() {
                 if let Ok((x, y)) = enigo.main_display() {
                     display_size = Some(Pos2::new(x as f32, y as f32));
                 }
@@ -281,10 +283,18 @@ impl eframe::App for MyApp {
                 }
             }
 
+            /*
             #[cfg(not(feature = "hyprland-support"))]
             {
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(init_pos));
                 self.init_pos = None;
+            }*/
+
+            #[cfg(not(feature = "wayland-support"))]
+            if let Err(e) =
+                crate::window_helper::move_window_x11(init_pos.x as i32, init_pos.y as i32)
+            {
+                error!("{}", e);
             }
         }
 
