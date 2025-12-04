@@ -1,5 +1,10 @@
 use clap::Parser;
-use std::{env, process};
+use image::DynamicImage;
+use image::ImageReader;
+use std::io::Cursor;
+use std::io::Read;
+use std::path::PathBuf;
+use std::process::ExitCode;
 
 /// Simple Popup dictionary
 #[derive(Parser, Debug)]
@@ -7,6 +12,14 @@ use std::{env, process};
 struct Args {
     #[clap(flatten)]
     action: Action,
+
+    /// Path to image file (requires --ocr or -o)
+    #[arg(long = "path", value_name = "PATH", requires = "ocr")]
+    path: Option<String>,
+
+    /// Raw image data (requires --ocr or -o)
+    #[arg(long = "data", value_name = "DATA", requires = "ocr")]
+    data: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -31,9 +44,13 @@ struct Action {
     /// Copy text by simulating Ctrl+C and pass from clipboard as input text
     #[arg(short = 'c', long = "copy")]
     copy: bool,
+
+    /// Use OCR mode. Reads image from path of provided, otherwise takes image data from stdin
+    #[arg(short = 'o', long = "ocr", value_name = "PATH")]
+    ocr: Option<Option<PathBuf>>,
 }
 
-fn main() {
+fn main() -> ExitCode {
     #[cfg(debug_assertions)]
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
@@ -44,31 +61,60 @@ fn main() {
     let cli: Args = Args::parse();
 
     if let Some(text) = &cli.action.text {
-        let sentence: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-
-        if let Err(e) = popup_dictionary::run(&sentence) {
+        if let Err(e) = popup_dictionary::run(&text) {
             eprintln!("Error: {e}");
-            process::exit(1);
+            return ExitCode::FAILURE;
         }
     } else if cli.action.primary {
         if let Err(e) = popup_dictionary::primary() {
             eprintln!("Error: {e}");
-            process::exit(1);
+            return ExitCode::FAILURE;
         }
     } else if cli.action.secondary {
         if let Err(e) = popup_dictionary::secondary() {
             eprintln!("Error: {e}");
-            process::exit(1);
+            return ExitCode::FAILURE;
         }
     } else if cli.action.clipboard {
         if let Err(e) = popup_dictionary::clipboard() {
             eprintln!("Error: {e}");
-            process::exit(1);
+            return ExitCode::FAILURE;
         }
     } else if cli.action.copy {
         if let Err(e) = popup_dictionary::copy() {
             eprintln!("Error: {e}");
-            process::exit(1);
+            return ExitCode::FAILURE;
+        }
+    } else if let Some(ocr_path) = cli.action.ocr {
+        match get_image_for_ocr(ocr_path) {
+            Ok(image) => {
+                if let Err(e) = popup_dictionary::ocr(image) {
+                    eprintln!("Error: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+            Err(e) => {
+                eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
+    ExitCode::SUCCESS
+}
+
+fn get_image_for_ocr(ocr_arg: Option<PathBuf>) -> Result<DynamicImage, Box<dyn std::error::Error>> {
+    match ocr_arg {
+        Some(path) => Ok(image::open(path)?),
+        None => {
+            let mut buffer = Vec::new();
+            std::io::stdin().read_to_end(&mut buffer)?;
+
+            let img: DynamicImage = ImageReader::new(Cursor::new(buffer))
+                .with_guessed_format()?
+                .decode()?;
+
+            Ok(img)
         }
     }
 }
