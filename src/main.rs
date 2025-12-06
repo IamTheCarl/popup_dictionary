@@ -12,14 +12,6 @@ use std::process::ExitCode;
 struct Args {
     #[clap(flatten)]
     action: Action,
-
-    /// Path to image file (requires --ocr or -o)
-    #[arg(long = "path", value_name = "PATH", requires = "ocr")]
-    path: Option<String>,
-
-    /// Raw image data (requires --ocr or -o)
-    #[arg(long = "data", value_name = "DATA", requires = "ocr")]
-    data: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -45,7 +37,7 @@ struct Action {
     #[arg(short = 'c', long = "copy")]
     copy: bool,
 
-    /// Use OCR mode. Reads image from path of provided, otherwise takes image data from stdin
+    /// Use OCR mode. Reads image from path if provided, otherwise takes image data from stdin
     #[arg(short = 'o', long = "ocr", value_name = "PATH")]
     ocr: Option<Option<PathBuf>>,
 }
