@@ -15,6 +15,10 @@ mod window_helper;
 pub fn run(sentence: &str) -> Result<(), Box<dyn Error>> {
     let sentence: String = sentence.chars().filter(|c| !c.is_whitespace()).collect();
 
+    if sentence.is_empty() {
+        return Err(Box::from("Input text must be at least one character."));
+    }
+
     run_app(&sentence)?;
 
     Ok(())
