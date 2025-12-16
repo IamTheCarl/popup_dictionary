@@ -170,7 +170,7 @@ pub struct MyApp {
     #[cfg(feature = "hyprland-support")]
     is_hyprland: bool,
     sentence: String,
-    selected_word_index: usize,
+    selected_word_index: Option<usize>,
     plugin_state: Arc<Mutex<PluginState>>,
     available_plugins: Vec<Plugins>,
     active_plugin_index: usize,
@@ -190,7 +190,7 @@ impl MyApp {
             #[cfg(feature = "hyprland-support")]
             is_hyprland,
             sentence: sentence.to_string(),
-            selected_word_index: 0,
+            selected_word_index: None,
             plugin_state: Arc::new(Mutex::new(PluginState::Initial)),
             available_plugins: Plugins::all(),
             active_plugin_index: 0,
@@ -253,7 +253,7 @@ impl MyApp {
             *state_clone.lock().unwrap() = PluginState::Ready(plugin);
         });
 
-        self.selected_word_index = 0;
+        self.selected_word_index = None;
         self.active_plugin_index = plugin_index;
     }
 }
@@ -345,6 +345,21 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| match &(*self.plugin_state.lock().unwrap()) {
                 PluginState::Ready(plugin) => {
                     let tokens: &Vec<Token> = plugin.get_tokens();
+
+                    if self.selected_word_index.is_none() {
+                        let mut first_valid_idx: usize = 0;
+                        let mut curr_idx: usize = 0;
+                        while curr_idx < tokens.len() {
+                            if tokens[curr_idx].is_valid() {
+                                first_valid_idx = curr_idx;
+                                break;
+                            }
+                            curr_idx += 1;
+                        }
+                        self.selected_word_index = Some(first_valid_idx);
+                    }
+                    let selected_word_idx: usize = self.selected_word_index.unwrap();
+
                     ui.horizontal_top(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
                             ui.set_min_height(42.0);
@@ -355,7 +370,7 @@ impl eframe::App for MyApp {
                                     RichText::new(&token.input_word).size(font_size);
                                 if token.is_valid() {
                                     label_text = label_text.underline().color(Color32::GRAY);
-                                    if idx == self.selected_word_index {
+                                    if idx == selected_word_idx {
                                         label_text = label_text.color(Color32::WHITE);
                                     }
 
@@ -389,7 +404,7 @@ impl eframe::App for MyApp {
                                         );
                                     }
                                     if response.clicked() {
-                                        self.selected_word_index = idx;
+                                        self.selected_word_index = Some(idx);
                                     }
                                 } else {
                                     ui.label(label_text);
@@ -400,13 +415,7 @@ impl eframe::App for MyApp {
 
                     ui.add_space(10.0);
 
-                    plugin.display_token(
-                        ctx,
-                        &main_frame,
-                        self,
-                        ui,
-                        &tokens[self.selected_word_index],
-                    );
+                    plugin.display_token(ctx, &main_frame, self, ui, &tokens[selected_word_idx]);
                 }
                 _ => {
                     ui.vertical_centered(|ui| {
