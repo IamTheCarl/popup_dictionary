@@ -12,43 +12,47 @@ mod plugin;
 mod plugins;
 mod window_helper;
 
-pub fn run(sentence: &str) -> Result<(), Box<dyn Error>> {
+pub fn run(sentence: &str, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     let sentence: String = sentence.chars().filter(|c| !c.is_whitespace()).collect();
 
     if sentence.is_empty() {
         return Err(Box::from("Input text must be at least one character."));
     }
 
-    run_app(&sentence)?;
+    let initial_plugin: String = initial_plugin
+        .to_owned()
+        .unwrap_or(crate::plugin::Plugins::all()[0].name().to_owned());
+
+    run_app(&sentence, &initial_plugin)?;
 
     Ok(())
 }
 
-pub fn primary() -> Result<(), Box<dyn Error>> {
+pub fn primary(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Primary)
         .text()?;
-    run(&sentence)
+    run(&sentence, initial_plugin)
 }
 
-pub fn secondary() -> Result<(), Box<dyn Error>> {
+pub fn secondary(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Secondary)
         .text()?;
-    run(&sentence)
+    run(&sentence, initial_plugin)
 }
 
-pub fn clipboard() -> Result<(), Box<dyn Error>> {
+pub fn clipboard(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard.get().text()?;
-    run(&sentence)
+    run(&sentence, initial_plugin)
 }
 
-pub fn copy() -> Result<(), Box<dyn Error>> {
+pub fn copy(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     // send Ctrl+C (twice as workaround for not always registering)
     let mut enigo: Enigo = Enigo::new(&enigo::Settings::default())?;
     enigo.set_delay(100);
@@ -63,10 +67,10 @@ pub fn copy() -> Result<(), Box<dyn Error>> {
     enigo.key(enigo::Key::Control, enigo::Direction::Release)?;
     std::thread::sleep(core::time::Duration::from_millis(100));
 
-    clipboard()
+    clipboard(initial_plugin)
 }
 
-pub fn ocr(image: DynamicImage) -> Result<(), Box<dyn Error>> {
+pub fn ocr(image: DynamicImage, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     let image = image.to_rgb8();
     let width: i32 = image.width() as i32;
     let height: i32 = image.height() as i32;
@@ -102,7 +106,7 @@ pub fn ocr(image: DynamicImage) -> Result<(), Box<dyn Error>> {
 
     tess.end()?;
 
-    run(&sentence)
+    run(&sentence, initial_plugin)
 }
 
 // from tesseract-rs docs

@@ -17,7 +17,7 @@ const WINDOW_INIT_WIDTH: f32 = 450.0;
 const WINDOW_INIT_HEIGHT: f32 = 450.0;
 pub const APP_NAME: &str = "Popup Dictionary";
 
-pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
+pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
 
@@ -58,6 +58,7 @@ pub fn run_app(sentence: &str) -> Result<(), eframe::Error> {
             Ok(Box::new(MyApp::new(
                 cc,
                 init_pos,
+                initial_plugin,
                 #[cfg(feature = "hyprland-support")]
                 is_hyprland,
                 sentence,
@@ -180,10 +181,19 @@ impl MyApp {
     fn new(
         cc: &eframe::CreationContext<'_>,
         init_pos: Option<Pos2>,
+        init_plugin: &str,
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
         Self::load_main_font(&cc.egui_ctx);
+
+        let available_plugins: Vec<Plugins> = Plugins::all();
+        println!("plugin: {}", init_plugin);
+        let init_plugin_idx: usize = available_plugins
+            .iter()
+            .position(|p| p.name() == init_plugin)
+            .unwrap_or(0);
+        println!("plugin: {}", init_plugin_idx);
 
         let mut app = Self {
             init_pos,
@@ -192,11 +202,11 @@ impl MyApp {
             sentence: sentence.to_string(),
             selected_word_index: None,
             plugin_state: Arc::new(Mutex::new(PluginState::Initial)),
-            available_plugins: Plugins::all(),
-            active_plugin_index: 0,
+            available_plugins,
+            active_plugin_index: init_plugin_idx,
         };
 
-        app.try_load_plugin(0);
+        app.try_load_plugin(init_plugin_idx);
 
         app
     }

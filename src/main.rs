@@ -12,6 +12,10 @@ use std::process::ExitCode;
 struct Args {
     #[clap(flatten)]
     action: Action,
+
+    /// Initial plugin to load. Available: "jmdict+jumandic", "jotoba"
+    #[arg(long = "initial-plugin", value_name = "PLUGIN")]
+    initial_plugin: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -53,34 +57,34 @@ fn main() -> ExitCode {
     let cli: Args = Args::parse();
 
     if let Some(text) = &cli.action.text {
-        if let Err(e) = popup_dictionary::run(&text) {
+        if let Err(e) = popup_dictionary::run(&text, &cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.primary {
-        if let Err(e) = popup_dictionary::primary() {
+        if let Err(e) = popup_dictionary::primary(&cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.secondary {
-        if let Err(e) = popup_dictionary::secondary() {
+        if let Err(e) = popup_dictionary::secondary(&cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.clipboard {
-        if let Err(e) = popup_dictionary::clipboard() {
+        if let Err(e) = popup_dictionary::clipboard(&cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.copy {
-        if let Err(e) = popup_dictionary::copy() {
+        if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if let Some(ocr_path) = cli.action.ocr {
         match get_image_for_ocr(ocr_path) {
             Ok(image) => {
-                if let Err(e) = popup_dictionary::ocr(image) {
+                if let Err(e) = popup_dictionary::ocr(image, &cli.initial_plugin) {
                     eprintln!("Error: {e}");
                     return ExitCode::FAILURE;
                 }
