@@ -327,116 +327,180 @@ impl eframe::App for MyApp {
             stroke: egui::Stroke::NONE,
         };
 
-        egui::TopBottomPanel::bottom("plugins_footer")
-            .min_height(40.0)
-            .frame(main_frame)
-            .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    let mut clicked_idx: Option<usize> = None;
-                    for (idx, active_plugin) in self.available_plugins.iter().enumerate() {
-                        if ui
-                            .add(egui::Button::selectable(
-                                self.active_plugin_index == idx,
-                                RichText::new(active_plugin.name()).size(20.0),
-                            ))
-                            .clicked()
-                        {
-                            clicked_idx = Some(idx);
-                        }
-                    }
-                    if let Some(idx) = clicked_idx {
-                        self.try_load_plugin(idx);
-                    }
-                });
-            });
-
         egui::CentralPanel::default()
             .frame(main_frame)
-            .show(ctx, |ui| match &(*self.plugin_state.lock().unwrap()) {
-                PluginState::Ready(plugin) => {
-                    let tokens: &Vec<Token> = plugin.get_tokens();
+            .show(ctx, |ui| {
+                let available_height = ui.available_height();
+                let header_height = 42.0;
+                let footer_height = 44.0;
 
-                    if self.selected_word_index.is_none() {
-                        let mut first_valid_idx: usize = 0;
-                        let mut curr_idx: usize = 0;
-                        while curr_idx < tokens.len() {
-                            if tokens[curr_idx].is_valid() {
-                                first_valid_idx = curr_idx;
-                                break;
-                            }
-                            curr_idx += 1;
-                        }
-                        self.selected_word_index = Some(first_valid_idx);
-                    }
-                    let selected_word_idx: usize = self.selected_word_index.unwrap();
+                match &(*self.plugin_state.lock().unwrap()) {
+                    PluginState::Ready(plugin) => {
+                        let tokens: &Vec<Token> = plugin.get_tokens();
 
-                    ui.horizontal_top(|ui| {
-                        egui::ScrollArea::horizontal().show(ui, |ui| {
-                            ui.set_min_height(42.0);
-
-                            for (idx, token) in tokens.iter().enumerate() {
-                                let font_size: f32 = 20.0;
-                                let mut label_text: RichText =
-                                    RichText::new(&token.input_word).size(font_size);
-                                if token.is_valid() {
-                                    label_text = label_text.underline().color(Color32::GRAY);
-                                    if idx == selected_word_idx {
-                                        label_text = label_text.color(Color32::WHITE);
-                                    }
-
-                                    let text_size: egui::Vec2 = {
-                                        let temp_galley: Arc<egui::Galley> = ui.fonts_mut(|f| {
-                                            f.layout_no_wrap(
-                                                label_text.text().to_string(),
-                                                egui::FontId::proportional(font_size),
-                                                Color32::PLACEHOLDER,
-                                            )
-                                        });
-                                        temp_galley.size()
-                                    };
-                                    let (background_rect, _) =
-                                        ui.allocate_exact_size(text_size, egui::Sense::hover());
-                                    let label_rect: Rect =
-                                        Rect::from_center_size(background_rect.center(), text_size);
-
-                                    let response = ui
-                                        .scope_builder(
-                                            egui::UiBuilder::new().max_rect(label_rect),
-                                            |ui| ui.label(label_text),
-                                        )
-                                        .inner;
-                                    if response.hovered() {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                                        ui.painter().rect_filled(
-                                            background_rect,
-                                            CornerRadius::same(4),
-                                            Color32::from_rgba_premultiplied(40, 40, 40, 40),
-                                        );
-                                    }
-                                    if response.clicked() {
-                                        self.selected_word_index = Some(idx);
-                                    }
-                                } else {
-                                    ui.label(label_text);
+                        if self.selected_word_index.is_none() {
+                            let mut first_valid_idx: usize = 0;
+                            let mut curr_idx: usize = 0;
+                            while curr_idx < tokens.len() {
+                                if tokens[curr_idx].is_valid() {
+                                    first_valid_idx = curr_idx;
+                                    break;
                                 }
+                                curr_idx += 1;
+                            }
+                            self.selected_word_index = Some(first_valid_idx);
+                        }
+                        let selected_word_idx: usize = self.selected_word_index.unwrap();
+
+                        egui::ScrollArea::horizontal()
+                            .id_salt("token_header")
+                            .max_height(header_height)
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    for (idx, token) in tokens.iter().enumerate() {
+                                        let font_size: f32 = 20.0;
+                                        let mut label_text: RichText =
+                                            RichText::new(&token.input_word).size(font_size);
+                                        if token.is_valid() {
+                                            label_text =
+                                                label_text.underline().color(Color32::GRAY);
+                                            if idx == selected_word_idx {
+                                                label_text = label_text.color(Color32::WHITE);
+                                            }
+
+                                            let text_size: egui::Vec2 = {
+                                                let temp_galley: Arc<egui::Galley> =
+                                                    ui.fonts_mut(|f| {
+                                                        f.layout_no_wrap(
+                                                            label_text.text().to_string(),
+                                                            egui::FontId::proportional(font_size),
+                                                            Color32::PLACEHOLDER,
+                                                        )
+                                                    });
+                                                temp_galley.size()
+                                            };
+                                            let (background_rect, _) = ui.allocate_exact_size(
+                                                text_size,
+                                                egui::Sense::hover(),
+                                            );
+                                            let label_rect: Rect = Rect::from_center_size(
+                                                background_rect.center(),
+                                                text_size,
+                                            );
+
+                                            let response = ui
+                                                .scope_builder(
+                                                    egui::UiBuilder::new().max_rect(label_rect),
+                                                    |ui| ui.label(label_text),
+                                                )
+                                                .inner;
+                                            if response.hovered() {
+                                                ui.ctx().set_cursor_icon(
+                                                    egui::CursorIcon::PointingHand,
+                                                );
+                                                ui.painter().rect_filled(
+                                                    background_rect,
+                                                    CornerRadius::same(4),
+                                                    Color32::from_rgba_premultiplied(
+                                                        40, 40, 40, 40,
+                                                    ),
+                                                );
+                                            }
+                                            if response.clicked() {
+                                                self.selected_word_index = Some(idx);
+                                            }
+                                        } else {
+                                            ui.label(label_text);
+                                        }
+                                    }
+                                });
+                                ui.add_space(10.0);
+                            });
+
+                        ui.separator();
+
+                        let center_height = available_height - header_height - footer_height - 10.0;
+                        egui::ScrollArea::vertical()
+                            .id_salt("plugin_display_section")
+                            .max_height(center_height)
+                            .auto_shrink(false)
+                            .show(ui, |ui| {
+                                plugin.display_token(
+                                    ctx,
+                                    &main_frame,
+                                    self,
+                                    ui,
+                                    &tokens[selected_word_idx],
+                                );
+                            });
+                    }
+                    _ => {
+                        let center_height = available_height - footer_height + 2.0;
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(ui.available_width(), center_height),
+                            egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                            |ui| {
+                                ui.horizontal(|ui| {
+                                    // horizontal centering by ms-eevee on github:
+                                    //
+                                    // We create a closure function containing our elements, as we will be calling it twice.
+                                    // Any additional elements to be centered would go within this closure.
+                                    let elements = |ui: &mut egui::Ui| {
+                                        ui.spinner();
+                                        ui.add(egui::Label::new(
+                                            RichText::new("Loading Plugin...").size(20.0),
+                                        ));
+                                    };
+
+                                    // Create a new child Ui with the invisible flag set so that the element does not actually
+                                    // get shown on the GUI.
+                                    // As a sidenote, we are taking advantage of the fact that new_child() does not allocate any of
+                                    // the widget's space in the parent UI, so we are free to draw as much as we want without
+                                    // advancing the parent's cursor.
+                                    let mut hidden =
+                                        ui.new_child(egui::UiBuilder::new().invisible());
+
+                                    // Call our elements closure, passing in the invisible Ui child to be rendered.
+                                    elements(&mut hidden);
+
+                                    // We get the size of the rendered elements through min_rect() here as well.
+                                    let diff: f32 = hidden.min_rect().width();
+
+                                    // Add a space before rendering the element to the main screen.
+                                    ui.add_space((ui.max_rect().width() / 2.) - (diff / 2.));
+                                    // Finally, render the elements to the main UI.
+                                    elements(ui);
+                                });
+                            },
+                        );
+                        //ctx.request_repaint();
+                    }
+                }
+
+                ui.separator();
+
+                egui::ScrollArea::horizontal()
+                    .id_salt("plugin_footer")
+                    .max_height(footer_height)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let mut clicked_idx: Option<usize> = None;
+                            for (idx, active_plugin) in self.available_plugins.iter().enumerate() {
+                                if ui
+                                    .add(egui::Button::selectable(
+                                        self.active_plugin_index == idx,
+                                        RichText::new(active_plugin.name()).size(20.0),
+                                    ))
+                                    .clicked()
+                                {
+                                    clicked_idx = Some(idx);
+                                }
+                            }
+                            if let Some(idx) = clicked_idx {
+                                self.try_load_plugin(idx);
                             }
                         });
                     });
-
-                    ui.add_space(10.0);
-
-                    plugin.display_token(ctx, &main_frame, self, ui, &tokens[selected_word_idx]);
-                }
-                _ => {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(ui.available_height() / 2.0 - 20.0);
-                        ui.spinner();
-                        ui.add(egui::Label::new(
-                            RichText::new("Loading Plugin...").size(20.0),
-                        ));
-                    });
-                    ctx.request_repaint();
-                }
             });
     }
 }
