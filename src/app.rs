@@ -497,7 +497,15 @@ impl eframe::App for MyApp {
                                 }
                             }
                             if let Some(idx) = clicked_idx {
-                                self.try_load_plugin(idx);
+                                if self.active_plugin_index == idx {
+                                    if let PluginState::Ready(plugin) =
+                                        &(*self.plugin_state.lock().unwrap())
+                                    {
+                                        plugin.open(ctx);
+                                    }
+                                } else {
+                                    self.try_load_plugin(idx);
+                                }
                             }
                         });
                     });

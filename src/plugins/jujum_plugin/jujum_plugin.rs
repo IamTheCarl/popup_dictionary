@@ -134,6 +134,8 @@ impl Plugin for JujumPlugin {
                 });
         });
     }
+
+    fn open(&self, ctx: &egui::Context) {}
 }
 
 impl JujumPlugin {

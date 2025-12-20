@@ -77,6 +77,16 @@ impl Plugin for JotobaPlugin {
             }
         }
     }
+
+    fn open(&self, ctx: &Context) {
+        ctx.open_url(egui::output::OpenUrl {
+            url: format!(
+                "https://jotoba.de/search/0/{}?l=en-US",
+                self.get_sentence_string()
+            ),
+            new_tab: true,
+        });
+    }
 }
 
 impl JotobaPlugin {

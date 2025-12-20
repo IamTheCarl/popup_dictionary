@@ -11,6 +11,7 @@ pub trait Plugin: Send + 'static {
         Self: Sized;
     fn get_tokens(&self) -> &Vec<Token>;
     fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token);
+    fn open(&self, ctx: &Context);
 }
 
 #[derive(Clone, Copy, PartialEq)]
