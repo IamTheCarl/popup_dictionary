@@ -112,6 +112,7 @@ fn get_optimal_init_pos(
             break 'outer;
         }
 
+        /*
         #[cfg(feature = "wayland-support")]
         {
             // try xwayland workaround
@@ -128,7 +129,7 @@ fn get_optimal_init_pos(
                     display_size = Some(Pos2::new(x as f32, y as f32));
                 }
             }
-        }
+        }*/
     }
 
     if let Some(cursor_pos) = cursor_pos
