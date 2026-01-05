@@ -30,9 +30,9 @@ pub fn tokenize(
     query: &String,
     dictionary: &crate::plugins::jujum_plugin::jmdict_dictionary::Dictionary,
 ) -> Result<Vec<Token>, Box<dyn Error>> {
-    let system_dic_path: PathBuf = match dirs::config_dir() {
+    let system_dic_path: PathBuf = match dirs::data_dir() {
         Some(path) => path.join("popup_dictionary/dicts/system.dic"),
-        None => Err("No valid config path found in environment variables.")?,
+        None => Err("No valid data path found in environment variables.")?,
     };
     let system_dic: File = File::open(system_dic_path)?;
     let reader: BufReader<File> = BufReader::new(system_dic);

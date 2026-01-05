@@ -19,9 +19,9 @@ pub struct JujumPlugin {
 impl Plugin for JujumPlugin {
     fn load_plugin(sentence: &str) -> Self {
         println!("loading jmdict");
-        let db_path: PathBuf = match dirs::config_dir() {
-            Some(path) => path.join("popup_dictionary/db"),
-            None => Err("No valid config path found in environment variables.").unwrap(),
+        let db_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path.join("popup_dictionary").join("db"),
+            None => Err("No valid data path found in environment variables.").unwrap(),
         };
         let dictionary: Dictionary = Dictionary::load_dictionary(&db_path).unwrap();
 
