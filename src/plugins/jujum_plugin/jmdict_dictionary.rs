@@ -100,6 +100,13 @@ impl Dictionary {
         let db: Db = sled::open(path)?;
         if !db.was_recovered() {
             Self::parse_jmdict_simplified(&db)?;
+            std::fs::File::create(path.join(".generated"))?;
+        } else {
+            if !path.join(".generated").try_exists()? {
+                db.clear()?;
+                Self::parse_jmdict_simplified(&db)?;
+                std::fs::File::create(path.join(".generated"))?;
+            }
         }
         Ok(Self { db })
     }

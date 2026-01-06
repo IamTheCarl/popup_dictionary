@@ -24,6 +24,7 @@ impl Plugin for JujumPlugin {
             None => Err("No valid data path found in environment variables.").unwrap(),
         };
         let dictionary: Dictionary = Dictionary::load_dictionary(&db_path).unwrap();
+        std::fs::File::create(db_path.join(".generated")).unwrap();
 
         println!("tokenizing with jumandic");
         let tokens: Vec<Token> = tokenize(&sentence.to_string(), &dictionary).unwrap();
