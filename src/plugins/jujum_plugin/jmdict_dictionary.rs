@@ -99,16 +99,22 @@ impl Dictionary {
     pub fn load_dictionary(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
         if !db.was_recovered() {
-            Self::parse_jmdict_simplified(&db)?;
-            std::fs::File::create(path.join(".generated"))?;
+            Self::populate_database(&db)?;
         } else {
-            if !path.join(".generated").try_exists()? {
+            if !db.contains_key("successfully_populated_flag")? {
                 db.clear()?;
-                Self::parse_jmdict_simplified(&db)?;
-                std::fs::File::create(path.join(".generated"))?;
+                Self::populate_database(&db)?;
             }
         }
         Ok(Self { db })
+    }
+
+    fn populate_database(db: &Db) -> Result<&Db, Box<dyn Error>> {
+        println!("populating");
+        Self::parse_jmdict_simplified(&db)?;
+        db.insert("successfully_populated_flag", "")?;
+        db.flush()?;
+        Ok(db)
     }
 
     const GENERIC_TAGS: phf::Map<&'static str, &'static str> = phf::phf_map! {
