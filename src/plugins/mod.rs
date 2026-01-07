@@ -1,2 +1,2 @@
 pub mod jotoba_plugin;
-pub mod jujum_plugin;
+pub mod kihon_plugin;

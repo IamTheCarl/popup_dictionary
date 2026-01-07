@@ -99,9 +99,22 @@ impl Dictionary {
     pub fn load_dictionary(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
         if !db.was_recovered() {
-            Self::parse_jmdict_simplified(&db)?;
+            Self::populate_database(&db)?;
+        } else {
+            if !db.contains_key("successfully_populated_flag")? {
+                db.clear()?;
+                Self::populate_database(&db)?;
+            }
         }
         Ok(Self { db })
+    }
+
+    fn populate_database(db: &Db) -> Result<&Db, Box<dyn Error>> {
+        println!("populating");
+        Self::parse_jmdict_simplified(&db)?;
+        db.insert("successfully_populated_flag", "")?;
+        db.flush()?;
+        Ok(db)
     }
 
     const GENERIC_TAGS: phf::Map<&'static str, &'static str> = phf::phf_map! {
@@ -156,9 +169,12 @@ impl Dictionary {
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
-        let jmdict_simplified_path: PathBuf = match dirs::config_dir() {
-            Some(path) => path.join("popup_dictionary/dicts/jmdict-simplified.json"),
-            None => Err("No valid config path found in environment variables.")?,
+        let jmdict_simplified_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path
+                .join("popup_dictionary")
+                .join("dicts")
+                .join("jmdict-simplified.json"),
+            None => Err("No valid data path found in environment variables.")?,
         };
         let file: File = File::open(jmdict_simplified_path)?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
@@ -283,9 +299,12 @@ impl Dictionary {
 
     fn parse_leeds_frequencies() -> Result<HashMap<String, u32>, Box<dyn Error>> {
         let mut frequency_map: HashMap<String, u32> = HashMap::new();
-        let leeds_frequency_path: PathBuf = match dirs::config_dir() {
-            Some(path) => path.join("popup_dictionary/dicts/leeds-corpus-frequency.txt"),
-            None => Err("No valid config path found in environment variables.")?,
+        let leeds_frequency_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path
+                .join("popup_dictionary")
+                .join("dicts")
+                .join("leeds-corpus-frequency.txt"),
+            None => Err("No valid data path found in environment variables.")?,
         };
         let file: File = File::open(leeds_frequency_path)?;
 
@@ -302,9 +321,12 @@ impl Dictionary {
     fn parse_jmdict_furigana() -> Result<HashMap<String, Vec<Furigana>>, Box<dyn Error>> {
         let mut furigana_map: HashMap<String, Vec<Furigana>> = HashMap::new();
 
-        let jmdict_furigana_path: PathBuf = match dirs::config_dir() {
-            Some(path) => path.join("popup_dictionary/dicts/jmdict-furigana.json"),
-            None => Err("No valid config path found in environment variables.")?,
+        let jmdict_furigana_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path
+                .join("popup_dictionary")
+                .join("dicts")
+                .join("jmdict-furigana.json"),
+            None => Err("No valid data path found in environment variables.")?,
         };
         let file: File = File::open(jmdict_furigana_path)?;
         let json: Vec<JMDictFurigana> = serde_json::from_reader(BufReader::new(file))?;

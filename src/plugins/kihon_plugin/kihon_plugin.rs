@@ -6,17 +6,17 @@ use std::path::PathBuf;
 use crate::app::MyApp;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
-use crate::plugins::jujum_plugin::jmdict_dictionary::{
+use crate::plugins::kihon_plugin::jmdict_dictionary::{
     Dictionary, DictionaryEntry, DictionaryTerm, Furigana,
 };
-use crate::plugins::jujum_plugin::jumandic_tokenizer::tokenize;
+use crate::plugins::kihon_plugin::jumandic_tokenizer::tokenize;
 
-pub struct JujumPlugin {
+pub struct KihonPlugin {
     tokens: Vec<Token>,
     dictionary: Dictionary,
 }
 
-impl Plugin for JujumPlugin {
+impl Plugin for KihonPlugin {
     fn load_plugin(sentence: &str) -> Self {
         println!("loading jmdict");
         let db_path: PathBuf = match dirs::data_dir() {
@@ -24,7 +24,6 @@ impl Plugin for JujumPlugin {
             None => Err("No valid data path found in environment variables.").unwrap(),
         };
         let dictionary: Dictionary = Dictionary::load_dictionary(&db_path).unwrap();
-        std::fs::File::create(db_path.join(".generated")).unwrap();
 
         println!("tokenizing with jumandic");
         let tokens: Vec<Token> = tokenize(&sentence.to_string(), &dictionary).unwrap();
@@ -47,7 +46,7 @@ impl Plugin for JujumPlugin {
         let forms_string: String = token
             .conjugations
             .iter()
-            .map(|form| crate::plugins::jujum_plugin::jumandic_tokenizer::get_form(form))
+            .map(|form| crate::plugins::kihon_plugin::jumandic_tokenizer::get_form(form))
             .collect::<Vec<&str>>()
             .join(", ");
         if forms_string != "*" {
@@ -139,7 +138,7 @@ impl Plugin for JujumPlugin {
     fn open(&self, ctx: &egui::Context) {}
 }
 
-impl JujumPlugin {
+impl KihonPlugin {
     fn display_terms_prioritized(&self, ui: &mut Ui, token: &Token, entry: &DictionaryEntry) {
         /*
         Display terms in this priority:

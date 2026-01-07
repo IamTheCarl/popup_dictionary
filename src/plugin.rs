@@ -16,18 +16,18 @@ pub trait Plugin: Send + 'static {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Plugins {
-    Jujum,
+    Kihon,
     Jotoba,
 }
 
 impl Plugins {
     pub fn all() -> Vec<Self> {
-        vec![Plugins::Jujum, Plugins::Jotoba]
+        vec![Plugins::Kihon, Plugins::Jotoba]
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            Plugins::Jujum => "jmdict+jumandic",
+            Plugins::Kihon => "kihon",
             Plugins::Jotoba => "jotoba",
         }
     }
@@ -36,8 +36,8 @@ impl Plugins {
         let start: Instant = Instant::now();
 
         let result: Box<dyn Plugin> = match self {
-            Plugins::Jujum => Box::new(
-                crate::plugins::jujum_plugin::jujum_plugin::JujumPlugin::load_plugin(sentence),
+            Plugins::Kihon => Box::new(
+                crate::plugins::kihon_plugin::kihon_plugin::KihonPlugin::load_plugin(sentence),
             ),
             Plugins::Jotoba => Box::new(
                 crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(sentence),

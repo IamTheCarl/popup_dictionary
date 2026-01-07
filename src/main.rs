@@ -13,7 +13,7 @@ struct Args {
     #[clap(flatten)]
     action: Action,
 
-    /// Initial plugin to load. Available: "jmdict+jumandic", "jotoba"
+    /// Initial plugin to load. Available: "kihon", "jotoba"
     #[arg(long = "initial-plugin", value_name = "PLUGIN")]
     initial_plugin: Option<String>,
 }
