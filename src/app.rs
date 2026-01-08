@@ -480,36 +480,71 @@ impl eframe::App for MyApp {
 
                 ui.separator();
 
-                egui::ScrollArea::horizontal()
-                    .id_salt("plugin_footer")
-                    .max_height(footer_height)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let mut clicked_idx: Option<usize> = None;
-                            for (idx, active_plugin) in self.available_plugins.iter().enumerate() {
-                                if ui
-                                    .add(egui::Button::selectable(
-                                        self.active_plugin_index == idx,
-                                        RichText::new(active_plugin.name()).size(20.0),
-                                    ))
-                                    .clicked()
+                ui.horizontal(|ui| {
+                    // Calculate right-side bar width
+                    let button_width: f32 = 18.0;
+                    let button_spacing: f32 = ui.spacing().item_spacing.x;
+                    let num_buttons: f32 = 3.0;
+                    let fixed_area_width = (button_width * num_buttons as f32)
+                        + (button_spacing * (num_buttons - 1.0))
+                        + button_spacing * 2.0;
+
+                    let available_width: f32 = ui.available_width() - fixed_area_width;
+                    egui::ScrollArea::horizontal()
+                        .id_salt("plugin_footer")
+                        .max_height(footer_height)
+                        .max_width(available_width)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                let mut clicked_idx: Option<usize> = None;
+                                for (idx, active_plugin) in
+                                    self.available_plugins.iter().enumerate()
                                 {
-                                    clicked_idx = Some(idx);
-                                }
-                            }
-                            if let Some(idx) = clicked_idx {
-                                if self.active_plugin_index == idx {
-                                    if let PluginState::Ready(plugin) =
-                                        &(*self.plugin_state.lock().unwrap())
+                                    if ui
+                                        .add(egui::Button::selectable(
+                                            self.active_plugin_index == idx,
+                                            RichText::new(active_plugin.name()).size(20.0),
+                                        ))
+                                        .clicked()
                                     {
-                                        plugin.open(ctx);
+                                        clicked_idx = Some(idx);
                                     }
-                                } else {
-                                    self.try_load_plugin(idx);
                                 }
-                            }
+                                if let Some(idx) = clicked_idx {
+                                    if !self.active_plugin_index == idx {
+                                        self.try_load_plugin(idx);
+                                    }else{
+
+                                    }
+                                }
+                            });
                         });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(egui::Button::new(RichText::new("⚙").size(16.0)))
+                            .clicked()
+                        {
+                            // Settings button
+                        }
+                        if ui
+                            .add(egui::Button::new(RichText::new("📋").size(16.0)))
+                            .clicked()
+                        {
+                            // Copy button
+                        }
+                        if ui
+                            .add(egui::Button::new(RichText::new("⭐").size(16.0)))
+                            .clicked()
+                        {
+                            if let PluginState::Ready(plugin) =
+                                &(*self.plugin_state.lock().unwrap())
+                            {
+                                plugin.open(ctx);
+                            }
+                        }
                     });
+                });
             });
     }
 }
