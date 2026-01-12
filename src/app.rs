@@ -511,10 +511,8 @@ impl eframe::App for MyApp {
                                     }
                                 }
                                 if let Some(idx) = clicked_idx {
-                                    if !self.active_plugin_index == idx {
+                                    if self.active_plugin_index != idx {
                                         self.try_load_plugin(idx);
-                                    }else{
-
                                     }
                                 }
                             });
