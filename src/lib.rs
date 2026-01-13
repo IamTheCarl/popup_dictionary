@@ -3,13 +3,14 @@ use enigo::{Enigo, Keyboard};
 use image::DynamicImage;
 use std::error::Error;
 use std::path::PathBuf;
-use tesseract_rs::TesseractAPI;
 
 use crate::app::run_app;
+use crate::tesseract::{check_tesseract, ocr_image};
 
 mod app;
 mod plugin;
 mod plugins;
+mod tesseract;
 mod window_helper;
 
 pub fn run(sentence: &str, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
@@ -71,6 +72,25 @@ pub fn copy(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn ocr(image: DynamicImage, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+    if let Err(e) = check_tesseract() {
+        eprintln!(
+            "Error: Tesseract could not be found. Make sure you have Tesseract installed if you want to use ocr."
+        );
+        eprint!("Tesseract Error: ");
+        return Err(Box::from(e));
+    }
+
+    let mut image_data = Vec::new();
+    image.write_to(
+        &mut std::io::Cursor::new(&mut image_data),
+        image::ImageFormat::Png,
+    )?;
+
+    let sentence = ocr_image(&image_data)?;
+
+    run(&sentence, initial_plugin)
+
+    /*
     let image = image.to_rgb8();
     let width: i32 = image.width() as i32;
     let height: i32 = image.height() as i32;
@@ -106,7 +126,7 @@ pub fn ocr(image: DynamicImage, initial_plugin: &Option<String>) -> Result<(), B
 
     tess.end()?;
 
-    run(&sentence, initial_plugin)
+    run(&sentence, initial_plugin)*/
 }
 
 // from tesseract-rs docs
