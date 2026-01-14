@@ -1,3 +1,10 @@
+use crate::app::{APP_NAME, WINDOW_INIT_HEIGHT, WINDOW_INIT_WIDTH};
+use egui::Pos2;
+use enigo::{Enigo, Mouse, Settings};
+#[cfg(feature = "hyprland-support")]
+use hyprland::dispatch::{Dispatch, DispatchType, Position, WindowIdentifier};
+#[cfg(feature = "hyprland-support")]
+use hyprland::prelude::*;
 use std::error::Error;
 use x11rb::{
     connection::Connection,
@@ -5,15 +12,90 @@ use x11rb::{
     rust_connection::RustConnection,
 };
 
+pub fn get_optimal_init_pos(
+    #[cfg(feature = "hyprland-support")] is_hyprland: bool,
+) -> Result<Pos2, Box<dyn Error>> {
+    let mut cursor_pos: Option<Pos2> = None;
+    let mut display_size: Option<Pos2> = None;
+    'outer: {
+        #[cfg(feature = "hyprland-support")]
+        if is_hyprland {
+            use hyprland::data::{CursorPosition, Monitor};
+
+            if let Ok(pos) = CursorPosition::get() {
+                cursor_pos = Some(Pos2::new(pos.x as f32, pos.y as f32));
+            }
+            if let Ok(monitor) = Monitor::get_active() {
+                display_size = Some(Pos2::new(
+                    (monitor.width as i32 + monitor.x) as f32,
+                    (monitor.height as i32 + monitor.y) as f32,
+                ));
+            }
+
+            if cursor_pos.is_some() && display_size.is_some() {
+                break 'outer;
+            }
+        }
+
+        // try x11/windows/macos
+        // wayland unlikely to work
+        // this can report wrong values, so making sure not to overwrite previous good values
+        let enigo: Enigo = Enigo::new(&Settings::default())?;
+        if cursor_pos.is_none() {
+            if let Ok((x, y)) = enigo.location() {
+                cursor_pos = Some(Pos2::new(x as f32, y as f32));
+            }
+        }
+        if display_size.is_none() {
+            if let Ok((x, y)) = enigo.main_display() {
+                display_size = Some(Pos2::new(x as f32, y as f32));
+            }
+        }
+        println!("position: {:?}, display: {:?}", cursor_pos, display_size);
+
+        if cursor_pos.is_some() && display_size.is_some() {
+            break 'outer;
+        }
+    }
+
+    if let Some(cursor_pos) = cursor_pos
+        && let Some(display_size) = display_size
+    {
+        if display_size.x >= cursor_pos.x && display_size.y >= cursor_pos.y {
+            let mut window_x: f32 = cursor_pos.x;
+            let mut window_y: f32 = cursor_pos.y;
+
+            if window_x + WINDOW_INIT_WIDTH as f32 > display_size.x {
+                window_x -= WINDOW_INIT_WIDTH as f32;
+            }
+
+            if window_y + WINDOW_INIT_HEIGHT as f32 > display_size.y {
+                window_y -= WINDOW_INIT_HEIGHT as f32;
+            }
+
+            return Ok(Pos2::new(window_x, window_y));
+        } else {
+            return Err(Box::from(format!(
+                "Cursor position ({}, {}) outside display bounds ({}, {}).",
+                cursor_pos.x, cursor_pos.y, display_size.x, display_size.y
+            )));
+        }
+    } else {
+        return Err(Box::from(
+            "No valid cursor position and/or display size found.",
+        ));
+    }
+}
+
 pub fn move_window_x11(x: i32, y: i32) -> Result<(), Box<dyn Error>> {
     let (connection, display_idx) = RustConnection::connect(None)?;
     let display = &connection.setup().roots[display_idx];
 
     println!("Looking for x11 window.");
-    match find_window_by_title(&connection, display.root, crate::app::APP_NAME)? {
+    match find_window_by_title_x11(&connection, display.root, APP_NAME)? {
         Some(window) => {
             println!("Found window: 0x{:x}", window);
-            move_window(&connection, window, x, y)?;
+            configure_window_pos_x11(&connection, window, x, y)?;
             println!("Moved window to position ({}, {})", x, y);
         }
         None => {
@@ -24,7 +106,7 @@ pub fn move_window_x11(x: i32, y: i32) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn find_window_by_title(
+fn find_window_by_title_x11(
     connection: &RustConnection,
     root: Window,
     title: &str,
@@ -32,12 +114,12 @@ fn find_window_by_title(
     let tree = connection.query_tree(root)?.reply()?;
 
     for &child in &tree.children {
-        let window_title = get_window_title(connection, child)?;
+        let window_title = get_window_title_x11(connection, child)?;
         if window_title.contains(title) {
             return Ok(Some(child));
         }
 
-        if let Some(found) = find_window_by_title(connection, child, title)? {
+        if let Some(found) = find_window_by_title_x11(connection, child, title)? {
             return Ok(Some(found));
         }
     }
@@ -45,7 +127,10 @@ fn find_window_by_title(
     Ok(None)
 }
 
-fn get_window_title(connection: &RustConnection, window: Window) -> Result<String, Box<dyn Error>> {
+fn get_window_title_x11(
+    connection: &RustConnection,
+    window: Window,
+) -> Result<String, Box<dyn Error>> {
     let net_wm_name = connection
         .intern_atom(false, b"_NET_WM_NAME")?
         .reply()?
@@ -74,16 +159,34 @@ fn get_window_title(connection: &RustConnection, window: Window) -> Result<Strin
     Ok(String::new())
 }
 
-fn move_window(
+fn configure_window_pos_x11(
     connection: &RustConnection,
     window: Window,
     x: i32,
     y: i32,
 ) -> Result<(), Box<dyn Error>> {
-    let values = ConfigureWindowAux::new().x(x).y(y);
+    let values = ConfigureWindowAux::new()
+        .x(x)
+        .y(y)
+        .width(WINDOW_INIT_WIDTH as u32)
+        .height(WINDOW_INIT_HEIGHT as u32);
 
     connection.configure_window(window, &values)?;
     connection.flush()?;
 
+    Ok(())
+}
+
+#[cfg(feature = "hyprland-support")]
+pub fn move_window_hyprland(x: i16, y: i16) -> Result<(), Box<dyn Error>> {
+    let window_id: WindowIdentifier<'_> = WindowIdentifier::Title(APP_NAME);
+    Dispatch::call(DispatchType::ResizeWindowPixel(
+        Position::Exact(WINDOW_INIT_HEIGHT, WINDOW_INIT_HEIGHT),
+        window_id.to_owned(),
+    ))?;
+    Dispatch::call(DispatchType::MoveWindowPixel(
+        Position::Exact(x, y),
+        window_id,
+    ))?;
     Ok(())
 }

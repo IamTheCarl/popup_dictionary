@@ -3,18 +3,13 @@ use eframe::{
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use enigo::{Enigo, Mouse, Settings};
 use log::{error, warn};
-use std::error::Error;
 use std::sync::{Arc, Mutex};
-
-#[cfg(feature = "hyprland-support")]
-use hyprland::prelude::*;
 
 use crate::plugin::{Plugin, Plugins, Token};
 
-const WINDOW_INIT_WIDTH: f32 = 450.0;
-const WINDOW_INIT_HEIGHT: f32 = 450.0;
+pub const WINDOW_INIT_WIDTH: i16 = 450;
+pub const WINDOW_INIT_HEIGHT: i16 = 450;
 pub const APP_NAME: &str = "Popup Dictionary";
 
 pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error> {
@@ -23,7 +18,7 @@ pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error
 
     let mut init_pos: Option<Pos2> = None;
     let options: NativeOptions;
-    match get_optimal_init_pos(
+    match crate::window_helper::get_optimal_init_pos(
         #[cfg(feature = "hyprland-support")]
         is_hyprland,
     ) {
@@ -33,7 +28,7 @@ pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error
             options = NativeOptions {
                 viewport: egui::ViewportBuilder::default()
                     .with_position(optimal_pos)
-                    .with_inner_size([WINDOW_INIT_WIDTH, WINDOW_INIT_HEIGHT])
+                    .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
                     .with_min_inner_size([100.0, 100.0])
                     .with_title(APP_NAME),
                 ..Default::default()
@@ -43,7 +38,7 @@ pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error
             warn!("Failed to get optimal init pos with error: {:?}", e);
             options = NativeOptions {
                 viewport: egui::ViewportBuilder::default()
-                    .with_inner_size([WINDOW_INIT_WIDTH, WINDOW_INIT_HEIGHT])
+                    .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
                     .with_min_inner_size([100.0, 100.0])
                     .with_title(APP_NAME),
                 ..Default::default()
@@ -65,100 +60,6 @@ pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error
             )))
         }),
     )
-}
-
-fn get_optimal_init_pos(
-    #[cfg(feature = "hyprland-support")] is_hyprland: bool,
-) -> Result<Pos2, Box<dyn Error>> {
-    let mut cursor_pos: Option<Pos2> = None;
-    let mut display_size: Option<Pos2> = None;
-    'outer: {
-        #[cfg(feature = "hyprland-support")]
-        if is_hyprland {
-            use hyprland::data::{CursorPosition, Monitor};
-
-            if let Ok(pos) = CursorPosition::get() {
-                cursor_pos = Some(Pos2::new(pos.x as f32, pos.y as f32));
-            }
-            if let Ok(monitor) = Monitor::get_active() {
-                display_size = Some(Pos2::new(
-                    (monitor.width as i32 + monitor.x) as f32,
-                    (monitor.height as i32 + monitor.y) as f32,
-                ));
-            }
-
-            if cursor_pos.is_some() && display_size.is_some() {
-                break 'outer;
-            }
-        }
-
-        // try x11/windows/macos
-        // wayland unlikely to work
-        // this can report wrong values, so making sure not to overwrite previous good values
-        let enigo: Enigo = Enigo::new(&Settings::default())?;
-        if cursor_pos.is_none() {
-            if let Ok((x, y)) = enigo.location() {
-                cursor_pos = Some(Pos2::new(x as f32, y as f32));
-            }
-        }
-        if display_size.is_none() {
-            if let Ok((x, y)) = enigo.main_display() {
-                display_size = Some(Pos2::new(x as f32, y as f32));
-            }
-        }
-        println!("position: {:?}, display: {:?}", cursor_pos, display_size);
-
-        if cursor_pos.is_some() && display_size.is_some() {
-            break 'outer;
-        }
-
-        /*
-        #[cfg(feature = "wayland-support")]
-        {
-            // try xwayland workaround
-            let mut settings: Settings = Settings::default();
-            settings.wayland_display = Some(":0".to_string());
-            let enigo: Enigo = Enigo::new(&settings)?;
-            if cursor_pos.is_none() {
-                if let Ok((x, y)) = enigo.location() {
-                    cursor_pos = Some(Pos2::new(x as f32, y as f32));
-                }
-            }
-            if display_size.is_none() {
-                if let Ok((x, y)) = enigo.main_display() {
-                    display_size = Some(Pos2::new(x as f32, y as f32));
-                }
-            }
-        }*/
-    }
-
-    if let Some(cursor_pos) = cursor_pos
-        && let Some(display_size) = display_size
-    {
-        if display_size.x >= cursor_pos.x && display_size.y >= cursor_pos.y {
-            let mut window_x: f32 = cursor_pos.x;
-            let mut window_y: f32 = cursor_pos.y;
-
-            if window_x + WINDOW_INIT_WIDTH > display_size.x {
-                window_x -= WINDOW_INIT_WIDTH;
-            }
-
-            if window_y + WINDOW_INIT_HEIGHT > display_size.y {
-                window_y -= WINDOW_INIT_HEIGHT;
-            }
-
-            return Ok(Pos2::new(window_x, window_y));
-        } else {
-            return Err(Box::from(format!(
-                "Cursor position ({}, {}) outside display bounds ({}, {}).",
-                cursor_pos.x, cursor_pos.y, display_size.x, display_size.y
-            )));
-        }
-    } else {
-        return Err(Box::from(
-            "No valid cursor position and/or display size found.",
-        ));
-    }
 }
 
 enum PluginState {
@@ -274,32 +175,14 @@ impl eframe::App for MyApp {
         if let Some(init_pos) = self.init_pos {
             #[cfg(feature = "hyprland-support")]
             if self.is_hyprland {
+                if let Err(e) =
+                    crate::window_helper::move_window_hyprland(init_pos.x as i16, init_pos.y as i16)
                 {
-                    use hyprland::dispatch::{Dispatch, DispatchType, Position, WindowIdentifier};
-
-                    let window_id: WindowIdentifier<'_> = WindowIdentifier::Title(APP_NAME);
-                    if Dispatch::call(DispatchType::ResizeWindowPixel(
-                        Position::Exact(WINDOW_INIT_WIDTH as i16, WINDOW_INIT_HEIGHT as i16),
-                        window_id.to_owned(),
-                    ))
-                    .is_ok()
-                        && Dispatch::call(DispatchType::MoveWindowPixel(
-                            Position::Exact(init_pos.x as i16, init_pos.y as i16),
-                            window_id,
-                        ))
-                        .is_ok()
-                    {
-                        self.init_pos = None;
-                    }
+                    error!("{}", e);
+                } else {
+                    self.init_pos = None;
                 }
             }
-
-            /*
-            #[cfg(not(feature = "hyprland-support"))]
-            {
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(init_pos));
-                self.init_pos = None;
-            }*/
 
             #[cfg(not(feature = "wayland-support"))]
             if let Err(e) =
