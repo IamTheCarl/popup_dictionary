@@ -16,6 +16,14 @@ struct Args {
     /// Initial plugin to load. Available: "kihon", "jotoba"
     #[arg(long = "initial-plugin", value_name = "PLUGIN")]
     initial_plugin: Option<String>,
+
+    /// Try to open the window at the mouse cursor. Unlikely to work on wayland
+    #[arg(short = 'm', long = "at-mouse")]
+    open_at_cursor: bool,
+
+    /// Display input text in a text-box instead of in one line
+    #[arg(short = 'f', long = "full-text")]
+    wrapped: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -37,10 +45,15 @@ struct Action {
     #[arg(short = 'b', long = "clipboard")]
     clipboard: bool,
 
+    /*
     /// Copy text by simulating Ctrl+C and pass from clipboard as input text
     #[arg(short = 'c', long = "copy")]
     copy: bool,
 
+    /// Watch clipboard for newly copied text
+    #[arg(short = 'w', long = "watch")]
+    watch: bool,
+    */
     /// Use OCR mode. Reads image from path if provided, otherwise takes image data from stdin
     #[arg(short = 'o', long = "ocr", value_name = "PATH")]
     ocr: Option<Option<PathBuf>>,
@@ -56,35 +69,49 @@ fn main() -> ExitCode {
 
     let cli: Args = Args::parse();
 
+    let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
+        initial_plugin: cli.initial_plugin,
+        open_at_cursor: cli.open_at_cursor,
+        wrapped: cli.wrapped,
+    };
+
     if let Some(text) = &cli.action.text {
-        if let Err(e) = popup_dictionary::run(&text, &cli.initial_plugin) {
+        if let Err(e) = popup_dictionary::run(&text, config) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.primary {
-        if let Err(e) = popup_dictionary::primary(&cli.initial_plugin) {
+        if let Err(e) = popup_dictionary::primary(config) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.secondary {
-        if let Err(e) = popup_dictionary::secondary(&cli.initial_plugin) {
+        if let Err(e) = popup_dictionary::secondary(config) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
     } else if cli.action.clipboard {
-        if let Err(e) = popup_dictionary::clipboard(&cli.initial_plugin) {
+        if let Err(e) = popup_dictionary::clipboard(config) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
+    /*
     } else if cli.action.copy {
         if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
             eprintln!("Error: {e}");
             return ExitCode::FAILURE;
         }
+
+    } else if cli.action.watch {
+        if let Err(e) = popup_dictionary::watch(config) {
+            eprintln!("Error: {e}");
+            return ExitCode::FAILURE;
+        }
+    */
     } else if let Some(ocr_path) = cli.action.ocr {
         match get_image_for_ocr(ocr_path) {
             Ok(image) => {
-                if let Err(e) = popup_dictionary::ocr(image, &cli.initial_plugin) {
+                if let Err(e) = popup_dictionary::ocr(image, config) {
                     eprintln!("Error: {e}");
                     return ExitCode::FAILURE;
                 }

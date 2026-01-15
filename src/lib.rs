@@ -7,52 +7,49 @@ use std::path::PathBuf;
 use crate::app::run_app;
 use crate::tesseract::{check_tesseract, ocr_image};
 
-mod app;
+pub mod app;
 mod plugin;
 mod plugins;
 mod tesseract;
 mod window_helper;
 
-pub fn run(sentence: &str, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
     let sentence: String = sentence.chars().filter(|c| !c.is_whitespace()).collect();
 
     if sentence.is_empty() {
         return Err(Box::from("Input text must be at least one character."));
     }
 
-    let initial_plugin: String = initial_plugin
-        .to_owned()
-        .unwrap_or(crate::plugin::Plugins::all()[0].name().to_owned());
-
-    run_app(&sentence, &initial_plugin)?;
+    run_app(&sentence, config)?;
 
     Ok(())
 }
 
-pub fn primary(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn primary(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Primary)
         .text()?;
-    run(&sentence, initial_plugin)
+    run(&sentence, config)
 }
 
-pub fn secondary(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn secondary(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Secondary)
         .text()?;
-    run(&sentence, initial_plugin)
+    run(&sentence, config)
 }
 
-pub fn clipboard(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn clipboard(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard.get().text()?;
-    run(&sentence, initial_plugin)
+    run(&sentence, config)
 }
 
+/*
 pub fn copy(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     // send Ctrl+C (twice as workaround for not always registering)
     let mut enigo: Enigo = Enigo::new(&enigo::Settings::default())?;
@@ -71,7 +68,14 @@ pub fn copy(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     clipboard(initial_plugin)
 }
 
-pub fn ocr(image: DynamicImage, initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
+
+pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
+    let mut clipboard: Clipboard = Clipboard::new()?;
+    let sentence: String = clipboard.get().text()?;
+    run(&sentence, config)
+}
+*/
+pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error>> {
     if let Err(e) = check_tesseract() {
         eprintln!(
             "Error: Tesseract could not be found. Make sure you have Tesseract installed if you want to use ocr."
@@ -88,7 +92,7 @@ pub fn ocr(image: DynamicImage, initial_plugin: &Option<String>) -> Result<(), B
 
     let sentence = ocr_image(&image_data)?;
 
-    run(&sentence, initial_plugin)
+    run(&sentence, config)
 
     /*
     let image = image.to_rgb8();

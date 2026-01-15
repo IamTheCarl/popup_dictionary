@@ -12,38 +12,54 @@ pub const WINDOW_INIT_WIDTH: i16 = 450;
 pub const WINDOW_INIT_HEIGHT: i16 = 450;
 pub const APP_NAME: &str = "Popup Dictionary";
 
-pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error> {
+pub struct Config {
+    pub initial_plugin: Option<String>,
+    pub open_at_cursor: bool,
+    pub wrapped: bool,
+}
+
+pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
 
     let mut init_pos: Option<Pos2> = None;
     let options: NativeOptions;
-    match crate::window_helper::get_optimal_init_pos(
-        #[cfg(feature = "hyprland-support")]
-        is_hyprland,
-    ) {
-        Ok(optimal_pos) => {
-            init_pos = Some(optimal_pos);
+    if config.open_at_cursor {
+        match crate::window_helper::get_optimal_init_pos(
+            #[cfg(feature = "hyprland-support")]
+            is_hyprland,
+        ) {
+            Ok(optimal_pos) => {
+                init_pos = Some(optimal_pos);
 
-            options = NativeOptions {
-                viewport: egui::ViewportBuilder::default()
-                    .with_position(optimal_pos)
-                    .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
-                    .with_min_inner_size([100.0, 100.0])
-                    .with_title(APP_NAME),
-                ..Default::default()
-            };
+                options = NativeOptions {
+                    viewport: egui::ViewportBuilder::default()
+                        .with_position(optimal_pos)
+                        .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                        .with_min_inner_size([100.0, 100.0])
+                        .with_title(APP_NAME),
+                    ..Default::default()
+                };
+            }
+            Err(e) => {
+                warn!("Failed to get optimal init pos with error: {:?}", e);
+                options = NativeOptions {
+                    viewport: egui::ViewportBuilder::default()
+                        .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                        .with_min_inner_size([100.0, 100.0])
+                        .with_title(APP_NAME),
+                    ..Default::default()
+                };
+            }
         }
-        Err(e) => {
-            warn!("Failed to get optimal init pos with error: {:?}", e);
-            options = NativeOptions {
-                viewport: egui::ViewportBuilder::default()
-                    .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
-                    .with_min_inner_size([100.0, 100.0])
-                    .with_title(APP_NAME),
-                ..Default::default()
-            };
-        }
+    } else {
+        options = NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                .with_min_inner_size([100.0, 100.0])
+                .with_title(APP_NAME),
+            ..Default::default()
+        };
     }
 
     eframe::run_native(
@@ -52,8 +68,8 @@ pub fn run_app(sentence: &str, initial_plugin: &str) -> Result<(), eframe::Error
         Box::new(|cc| {
             Ok(Box::new(MyApp::new(
                 cc,
+                config,
                 init_pos,
-                initial_plugin,
                 #[cfg(feature = "hyprland-support")]
                 is_hyprland,
                 sentence,
@@ -69,11 +85,12 @@ enum PluginState {
 }
 
 pub struct MyApp {
+    config: Config,
     init_pos: Option<Pos2>,
     #[cfg(feature = "hyprland-support")]
     is_hyprland: bool,
     sentence: String,
-    selected_word_index: Option<usize>,
+    selected_token_index: Option<usize>,
     plugin_state: Arc<Mutex<PluginState>>,
     available_plugins: Vec<Plugins>,
     active_plugin_index: usize,
@@ -82,27 +99,32 @@ pub struct MyApp {
 impl MyApp {
     fn new(
         cc: &eframe::CreationContext<'_>,
+        config: Config,
         init_pos: Option<Pos2>,
-        init_plugin: &str,
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
         Self::load_main_font(&cc.egui_ctx);
 
         let available_plugins: Vec<Plugins> = Plugins::all();
-        println!("plugin: {}", init_plugin);
-        let init_plugin_idx: usize = available_plugins
-            .iter()
-            .position(|p| p.name() == init_plugin)
-            .unwrap_or(0);
+        println!("plugin: {:?}", config.initial_plugin);
+        let init_plugin_idx: usize = if let Some(init_plugin) = &config.initial_plugin {
+            available_plugins
+                .iter()
+                .position(|p| p.name() == init_plugin)
+                .unwrap_or(0)
+        } else {
+            0
+        };
         println!("plugin: {}", init_plugin_idx);
 
         let mut app = Self {
+            config,
             init_pos,
             #[cfg(feature = "hyprland-support")]
             is_hyprland,
             sentence: sentence.to_string(),
-            selected_word_index: None,
+            selected_token_index: None,
             plugin_state: Arc::new(Mutex::new(PluginState::Initial)),
             available_plugins,
             active_plugin_index: init_plugin_idx,
@@ -165,7 +187,7 @@ impl MyApp {
             *state_clone.lock().unwrap() = PluginState::Ready(plugin);
         });
 
-        self.selected_word_index = None;
+        self.selected_token_index = None;
         self.active_plugin_index = plugin_index;
     }
 }
@@ -215,14 +237,14 @@ impl eframe::App for MyApp {
             .frame(main_frame)
             .show(ctx, |ui| {
                 let available_height = ui.available_height();
-                let header_height = 42.0;
-                let footer_height = 44.0;
+                let mut header_height = 42.0;
+                let footer_height = 42.0;
 
                 match &(*self.plugin_state.lock().unwrap()) {
                     PluginState::Ready(plugin) => {
                         let tokens: &Vec<Token> = plugin.get_tokens();
 
-                        if self.selected_word_index.is_none() {
+                        if self.selected_token_index.is_none() {
                             let mut first_valid_idx: usize = 0;
                             let mut curr_idx: usize = 0;
                             while curr_idx < tokens.len() {
@@ -232,78 +254,41 @@ impl eframe::App for MyApp {
                                 }
                                 curr_idx += 1;
                             }
-                            self.selected_word_index = Some(first_valid_idx);
+                            self.selected_token_index = Some(first_valid_idx);
                         }
-                        let selected_word_idx: usize = self.selected_word_index.unwrap();
+                        let selected_token_idx: usize = self.selected_token_index.unwrap();
 
-                        egui::ScrollArea::horizontal()
+                        let token_header = egui::ScrollArea::horizontal()
                             .id_salt("token_header")
-                            .max_height(header_height)
+                            //.max_height(header_height)
                             .show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    for (idx, token) in tokens.iter().enumerate() {
-                                        let font_size: f32 = 20.0;
-                                        let mut label_text: RichText =
-                                            RichText::new(&token.input_word).size(font_size);
-                                        if token.is_valid() {
-                                            label_text =
-                                                label_text.underline().color(Color32::GRAY);
-                                            if idx == selected_word_idx {
-                                                label_text = label_text.color(Color32::WHITE);
-                                            }
-
-                                            let text_size: egui::Vec2 = {
-                                                let temp_galley: Arc<egui::Galley> =
-                                                    ui.fonts_mut(|f| {
-                                                        f.layout_no_wrap(
-                                                            label_text.text().to_string(),
-                                                            egui::FontId::proportional(font_size),
-                                                            Color32::PLACEHOLDER,
-                                                        )
-                                                    });
-                                                temp_galley.size()
-                                            };
-                                            let (background_rect, _) = ui.allocate_exact_size(
-                                                text_size,
-                                                egui::Sense::hover(),
-                                            );
-                                            let label_rect: Rect = Rect::from_center_size(
-                                                background_rect.center(),
-                                                text_size,
-                                            );
-
-                                            let response = ui
-                                                .scope_builder(
-                                                    egui::UiBuilder::new().max_rect(label_rect),
-                                                    |ui| ui.label(label_text),
-                                                )
-                                                .inner;
-                                            if response.hovered() {
-                                                ui.ctx().set_cursor_icon(
-                                                    egui::CursorIcon::PointingHand,
-                                                );
-                                                ui.painter().rect_filled(
-                                                    background_rect,
-                                                    CornerRadius::same(4),
-                                                    Color32::from_rgba_premultiplied(
-                                                        40, 40, 40, 40,
-                                                    ),
-                                                );
-                                            }
-                                            if response.clicked() {
-                                                self.selected_word_index = Some(idx);
-                                            }
-                                        } else {
-                                            ui.label(label_text);
+                                if self.config.wrapped {
+                                    ui.horizontal_wrapped(|ui| {
+                                        if let Some(idx) =
+                                            display_token_header(ui, tokens, selected_token_idx)
+                                        {
+                                            self.selected_token_index = Some(idx);
                                         }
-                                    }
-                                });
+                                    });
+                                } else {
+                                    ui.horizontal(|ui| {
+                                        if let Some(idx) =
+                                            display_token_header(ui, tokens, selected_token_idx)
+                                        {
+                                            self.selected_token_index = Some(idx);
+                                        }
+                                    });
+                                }
+
                                 ui.add_space(10.0);
                             });
 
-                        ui.separator();
+                        header_height = token_header.inner_rect.height();
 
-                        let center_height = available_height - header_height - footer_height - 10.0;
+                        ui.separator();
+                        let space_left = ui.available_height();
+                        let center_height = space_left - footer_height;
+                        println!("available: {}, header height: {}, footer height: {}, center height: {}, left: {}", available_height, header_height, footer_height, center_height, space_left);
                         egui::ScrollArea::vertical()
                             .id_salt("plugin_display_section")
                             .max_height(center_height)
@@ -314,7 +299,7 @@ impl eframe::App for MyApp {
                                     &main_frame,
                                     self,
                                     ui,
-                                    &tokens[selected_word_idx],
+                                    &tokens[selected_token_idx],
                                 );
                             });
                     }
@@ -361,9 +346,11 @@ impl eframe::App for MyApp {
                     }
                 }
 
-                ui.separator();
 
-                ui.horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(ui.available_width(), footer_height),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
                     // Calculate right-side bar width
                     let button_width: f32 = 18.0;
                     let button_spacing: f32 = ui.spacing().item_spacing.x;
@@ -378,7 +365,7 @@ impl eframe::App for MyApp {
                         .max_height(footer_height)
                         .max_width(available_width)
                         .show(ui, |ui| {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_centered(|ui| {
                                 let mut clicked_idx: Option<usize> = None;
                                 for (idx, active_plugin) in
                                     self.available_plugins.iter().enumerate()
@@ -428,4 +415,54 @@ impl eframe::App for MyApp {
                 });
             });
     }
+}
+
+fn display_token_header(
+    ui: &mut egui::Ui,
+    tokens: &Vec<Token>,
+    selected_token_idx: usize,
+) -> Option<usize> {
+    for (idx, token) in tokens.iter().enumerate() {
+        let font_size: f32 = 20.0;
+        let mut label_text: RichText = RichText::new(&token.input_word).size(font_size);
+        if token.is_valid() {
+            label_text = label_text.underline().color(Color32::GRAY);
+            if idx == selected_token_idx {
+                label_text = label_text.color(Color32::WHITE);
+            }
+
+            let text_size: egui::Vec2 = {
+                let temp_galley: Arc<egui::Galley> = ui.fonts_mut(|f| {
+                    f.layout_no_wrap(
+                        label_text.text().to_string(),
+                        egui::FontId::proportional(font_size),
+                        Color32::PLACEHOLDER,
+                    )
+                });
+                temp_galley.size()
+            };
+            let (background_rect, _) = ui.allocate_exact_size(text_size, egui::Sense::hover());
+            let label_rect: Rect = Rect::from_center_size(background_rect.center(), text_size);
+
+            let response = ui
+                .scope_builder(egui::UiBuilder::new().max_rect(label_rect), |ui| {
+                    ui.label(label_text)
+                })
+                .inner;
+            if response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                ui.painter().rect_filled(
+                    background_rect,
+                    CornerRadius::same(4),
+                    Color32::from_rgba_premultiplied(40, 40, 40, 40),
+                );
+            }
+            if response.clicked() {
+                return Some(idx);
+            }
+        } else {
+            ui.label(label_text);
+        }
+    }
+    return None;
 }
