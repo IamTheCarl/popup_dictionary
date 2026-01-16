@@ -24,6 +24,14 @@ struct Args {
     /// Display input text in a text-box instead of in one line
     #[arg(short = 'f', long = "full-text")]
     wrapped: bool,
+
+    /// Initial window width in pixels. Default: 450
+    #[arg(long = "width", value_name = "PIXELS")]
+    initial_width: Option<u16>,
+
+    /// Initial window height in pixels. Default: 450
+    #[arg(long = "height", value_name = "PIXELS")]
+    initial_height: Option<u16>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -73,6 +81,8 @@ fn main() -> ExitCode {
         initial_plugin: cli.initial_plugin,
         open_at_cursor: cli.open_at_cursor,
         wrapped: cli.wrapped,
+        initial_width: cli.initial_width.unwrap_or(450),
+        initial_height: cli.initial_height.unwrap_or(450),
     };
 
     if let Some(text) = &cli.action.text {

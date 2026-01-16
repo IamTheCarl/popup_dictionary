@@ -1,4 +1,4 @@
-use crate::app::{APP_NAME, WINDOW_INIT_HEIGHT, WINDOW_INIT_WIDTH};
+use crate::app::APP_NAME;
 use egui::Pos2;
 use enigo::{Enigo, Mouse, Settings};
 #[cfg(feature = "hyprland-support")]
@@ -14,6 +14,8 @@ use x11rb::{
 
 pub fn get_optimal_init_pos(
     #[cfg(feature = "hyprland-support")] is_hyprland: bool,
+    width: f32,
+    height: f32,
 ) -> Result<Pos2, Box<dyn Error>> {
     let mut cursor_pos: Option<Pos2> = None;
     let mut display_size: Option<Pos2> = None;
@@ -65,12 +67,12 @@ pub fn get_optimal_init_pos(
             let mut window_x: f32 = cursor_pos.x;
             let mut window_y: f32 = cursor_pos.y;
 
-            if window_x + WINDOW_INIT_WIDTH as f32 > display_size.x {
-                window_x -= WINDOW_INIT_WIDTH as f32;
+            if window_x + width > display_size.x {
+                window_x -= width;
             }
 
-            if window_y + WINDOW_INIT_HEIGHT as f32 > display_size.y {
-                window_y -= WINDOW_INIT_HEIGHT as f32;
+            if window_y + height > display_size.y {
+                window_y -= height;
             }
 
             return Ok(Pos2::new(window_x, window_y));
@@ -165,11 +167,7 @@ fn configure_window_pos_x11(
     x: i32,
     y: i32,
 ) -> Result<(), Box<dyn Error>> {
-    let values = ConfigureWindowAux::new()
-        .x(x)
-        .y(y)
-        .width(WINDOW_INIT_WIDTH as u32)
-        .height(WINDOW_INIT_HEIGHT as u32);
+    let values = ConfigureWindowAux::new().x(x).y(y);
 
     connection.configure_window(window, &values)?;
     connection.flush()?;
@@ -180,10 +178,10 @@ fn configure_window_pos_x11(
 #[cfg(feature = "hyprland-support")]
 pub fn move_window_hyprland(x: i16, y: i16) -> Result<(), Box<dyn Error>> {
     let window_id: WindowIdentifier<'_> = WindowIdentifier::Title(APP_NAME);
-    Dispatch::call(DispatchType::ResizeWindowPixel(
+    /*Dispatch::call(DispatchType::ResizeWindowPixel(
         Position::Exact(WINDOW_INIT_HEIGHT, WINDOW_INIT_HEIGHT),
         window_id.to_owned(),
-    ))?;
+    ))?;*/
     Dispatch::call(DispatchType::MoveWindowPixel(
         Position::Exact(x, y),
         window_id,

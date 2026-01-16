@@ -8,14 +8,16 @@ use std::sync::{Arc, Mutex};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
-pub const WINDOW_INIT_WIDTH: i16 = 450;
-pub const WINDOW_INIT_HEIGHT: i16 = 450;
+//pub const WINDOW_INIT_WIDTH: i16 = 450;
+//pub const WINDOW_INIT_HEIGHT: i16 = 450;
 pub const APP_NAME: &str = "Popup Dictionary";
 
 pub struct Config {
     pub initial_plugin: Option<String>,
     pub open_at_cursor: bool,
     pub wrapped: bool,
+    pub initial_width: u16,
+    pub initial_height: u16,
 }
 
 pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
@@ -28,6 +30,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
         match crate::window_helper::get_optimal_init_pos(
             #[cfg(feature = "hyprland-support")]
             is_hyprland,
+            config.initial_width as f32,
+            config.initial_height as f32,
         ) {
             Ok(optimal_pos) => {
                 init_pos = Some(optimal_pos);
@@ -35,7 +39,10 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
                         .with_position(optimal_pos)
-                        .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                        .with_inner_size([
+                            config.initial_width as f32,
+                            config.initial_height as f32,
+                        ])
                         .with_min_inner_size([100.0, 100.0])
                         .with_title(APP_NAME),
                     ..Default::default()
@@ -45,7 +52,10 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 warn!("Failed to get optimal init pos with error: {:?}", e);
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
-                        .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                        .with_inner_size([
+                            config.initial_width as f32,
+                            config.initial_height as f32,
+                        ])
                         .with_min_inner_size([100.0, 100.0])
                         .with_title(APP_NAME),
                     ..Default::default()
@@ -55,7 +65,7 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
     } else {
         options = NativeOptions {
             viewport: egui::ViewportBuilder::default()
-                .with_inner_size([WINDOW_INIT_WIDTH as f32, WINDOW_INIT_HEIGHT as f32])
+                .with_inner_size([config.initial_width as f32, config.initial_height as f32])
                 .with_min_inner_size([100.0, 100.0])
                 .with_title(APP_NAME),
             ..Default::default()
