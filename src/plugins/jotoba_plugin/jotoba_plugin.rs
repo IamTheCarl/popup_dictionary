@@ -56,19 +56,17 @@ impl Plugin for JotobaPlugin {
                     .show(ui, |ui| {*/
                 for word in &response.words {
                     if let Some(kanji) = &word.reading.kanji {
-                        ui.label(RichText::new(kanji).size(22.0).color(Color32::WHITE));
+                        ui.label(RichText::new(kanji).heading()); //.size(22.0));
                     } else {
                         ui.label(
-                            RichText::new(&word.reading.kana)
-                                .size(22.0)
-                                .color(Color32::WHITE),
+                            RichText::new(&word.reading.kana).heading(), //.size(22.0)
                         );
                     }
                     let mut count: u32 = 1;
                     for sense in &word.senses {
                         ui.label(
                             RichText::new(format!("{}. {}", count, sense.glosses.join(", ")))
-                                .size(18.0),
+                                .small(),
                         );
                         count += 1;
                     }

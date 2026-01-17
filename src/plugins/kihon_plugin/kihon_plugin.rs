@@ -3,7 +3,9 @@ use egui::RichText;
 use egui::Ui;
 use std::path::PathBuf;
 
+use crate::app;
 use crate::app::MyApp;
+use crate::app::SPACING_SIZE;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
@@ -50,6 +52,7 @@ impl Plugin for KihonPlugin {
             .collect::<Vec<&str>>()
             .join(", ");
         if forms_string != "*" {
+            /*
             ui.scope(|ui| {
                 ui.style_mut()
                     .visuals
@@ -58,14 +61,10 @@ impl Plugin for KihonPlugin {
                     .bg_stroke
                     .color = Color32::from_rgba_premultiplied(10, 10, 10, 10);
                 ui.separator();
-            });
-            ui.label(
-                RichText::new(format!("Forms: {}", forms_string))
-                    .color(Color32::WHITE)
-                    .size(14.0),
-            );
+            });*/
+            ui.label(RichText::new(format!("Forms: {}", forms_string)).size(app::TINY_TEXT_SIZE));
         } else {
-            ui.add_space(32.0);
+            ui.add_space((app::TINY_TEXT_SIZE) + app::SPACING_SIZE + 1.0);
         }
         ui.scope(|ui| {
             ui.style_mut()
@@ -77,8 +76,6 @@ impl Plugin for KihonPlugin {
             ui.separator();
         });
 
-        ui.style_mut().visuals.indent_has_left_vline = false;
-        ui.style_mut().spacing.indent = 4.0;
         ui.indent("scroll_indent", |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
@@ -130,7 +127,7 @@ impl Plugin for KihonPlugin {
                         }
                     }
 
-                    ui.add_space(40.0);
+                    //ui.add_space(app::SPACING_SIZE * 4.0);
                 });
         });
     }
@@ -206,11 +203,7 @@ impl KihonPlugin {
                     Self::display_furigana(ui, &furigana);
                 }
             } else {
-                ui.label(
-                    RichText::new(&dictionary_term.reading)
-                        .size(22.0)
-                        .color(Color32::WHITE),
-                );
+                ui.label(RichText::new(&dictionary_term.reading).heading());
             }
 
             let mut count: u32 = 0;
@@ -220,10 +213,10 @@ impl KihonPlugin {
                 if tags != last_tags {
                     last_tags = tags.clone();
                     if count > 0 {
-                        ui.add_space(12.0);
+                        ui.add_space(app::SPACING_SIZE);
                         count = 1;
                     }
-                    ui.add_space(4.0);
+                    //ui.add_space(app::SPACING_SIZE * 0.5);
                     Self::display_tags(ui, &meaning.tags);
                 }
                 if count == 0 {
@@ -233,27 +226,23 @@ impl KihonPlugin {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new(format!("{}.", count))
-                            .size(18.0)
-                            .color(Color32::GRAY),
+                            .small()
+                            .color(app::SECONDARY_TEXT_COLOR),
                     );
-                    ui.label(
-                        RichText::new(format!("{}", meaning.gloss.join(", ")))
-                            .size(18.0)
-                            .color(Color32::WHITE),
-                    );
+                    ui.label(RichText::new(format!("{}", meaning.gloss.join(", "))).small());
                 });
                 if meaning.info.len() > 0 {
                     ui.horizontal_top(|ui| {
                         ui.label(
                             RichText::new(format!("{}.", count))
-                                .size(18.0)
+                                .small()
                                 .color(Color32::TRANSPARENT),
                         );
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
                                 RichText::new(format!("{}", meaning.info.join("; ")))
-                                    .size(12.0)
-                                    .color(Color32::GRAY),
+                                    .size(app::TINY_TEXT_SIZE * 0.9)
+                                    .color(app::SECONDARY_TEXT_COLOR),
                             );
                         });
                     });
@@ -262,7 +251,7 @@ impl KihonPlugin {
                 count += 1;
             }
 
-            ui.add_space(10.0);
+            ui.add_space(app::SPACING_SIZE * 0.5);
 
             let percent: f32 = 0.8;
             let width: f32 = ui.available_width() * percent;
@@ -277,7 +266,7 @@ impl KihonPlugin {
                 );
             });
 
-            ui.add_space(10.0);
+            ui.add_space(SPACING_SIZE * 0.5);
         }
     }
 
@@ -290,13 +279,11 @@ impl KihonPlugin {
     }
 
     fn display_tag(ui: &mut Ui, tag: &str) {
-        let text_color: Color32 = Color32::WHITE;
-
         let text_galley = ui.fonts_mut(|f| {
             f.layout_no_wrap(
                 tag.to_string(),
-                egui::FontId::proportional(14.0),
-                text_color,
+                egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                app::PRIMARY_TEXT_COLOR,
             )
         });
 
@@ -312,22 +299,20 @@ impl KihonPlugin {
 
         ui.painter().rect_filled(
             rect,
-            egui::CornerRadius::same(4),
-            Color32::from_rgb(50, 50, 50),
+            egui::CornerRadius::same(app::CORNER_RADIUS),
+            app::SECONDARY_BACKGROUND_COLOR,
         );
 
         ui.painter().galley(
             (rect.center() - text_galley.size() / 2.0) - egui::Vec2::new(0.0, 2.0),
             text_galley,
-            text_color,
+            app::PRIMARY_TEXT_COLOR,
         );
 
         //ui.allocate_space(rect.size());
     }
 
     fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>) {
-        let main_font_size: f32 = 22.0;
-        let furigana_font_size: f32 = 14.0;
         let vertical_gap: f32 = 1.0;
 
         // calculate how wide (and tall) the entire string will be
@@ -339,8 +324,8 @@ impl KihonPlugin {
             let main_galley = ui.fonts_mut(|f| {
                 f.layout_no_wrap(
                     furigana.ruby.to_string(),
-                    egui::FontId::proportional(main_font_size),
-                    Color32::WHITE,
+                    egui::FontId::proportional(app::BIG_TEXT_SIZE),
+                    app::PRIMARY_TEXT_COLOR,
                 )
             });
 
@@ -348,15 +333,15 @@ impl KihonPlugin {
                 ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         reading.to_string(),
-                        egui::FontId::proportional(furigana_font_size),
-                        Color32::LIGHT_GRAY,
+                        egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                        app::LIGHT_TEXT_COLOR,
                     )
                 })
             } else {
                 ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         "あ".to_string(), // invisible placeholder
-                        egui::FontId::proportional(furigana_font_size),
+                        egui::FontId::proportional(app::TINY_TEXT_SIZE),
                         Color32::TRANSPARENT,
                     )
                 })
@@ -388,7 +373,7 @@ impl KihonPlugin {
 
             let main_pos = egui::Pos2::new(
                 current_x + (char_width - main_galley.size().x) * 0.5,
-                rect.top() + furigana_font_size + vertical_gap,
+                rect.top() + app::TINY_TEXT_SIZE + vertical_gap,
             );
             ui.painter()
                 .galley(main_pos, main_galley, Color32::PLACEHOLDER);

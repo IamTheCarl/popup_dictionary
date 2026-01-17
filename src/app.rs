@@ -12,6 +12,18 @@ use crate::plugin::{Plugin, Plugins, Token};
 //pub const WINDOW_INIT_HEIGHT: i16 = 450;
 pub const APP_NAME: &str = "Popup Dictionary";
 
+const PRIMARY_BACKGROUND_COLOR: Color32 = Color32::from_rgb(30, 30, 30);
+pub const SECONDARY_BACKGROUND_COLOR: Color32 = Color32::from_rgb(50, 50, 50);
+pub const PRIMARY_TEXT_COLOR: Color32 = Color32::WHITE;
+pub const SECONDARY_TEXT_COLOR: Color32 = Color32::GRAY;
+pub const LIGHT_TEXT_COLOR: Color32 = Color32::LIGHT_GRAY;
+pub const BIG_TEXT_SIZE: f32 = 24.0;
+const PRIMARY_TEXT_SIZE: f32 = 20.0;
+pub const SMALL_TEXT_SIZE: f32 = 18.0;
+pub const TINY_TEXT_SIZE: f32 = 14.0;
+pub const SPACING_SIZE: f32 = 10.0;
+pub const CORNER_RADIUS: u8 = 4;
+
 pub struct Config {
     pub initial_plugin: Option<String>,
     pub open_at_cursor: bool,
@@ -104,6 +116,8 @@ pub struct MyApp {
     plugin_state: Arc<Mutex<PluginState>>,
     available_plugins: Vec<Plugins>,
     active_plugin_index: usize,
+    theme_is_set: bool,
+    main_frame: Option<egui::containers::Frame>,
 }
 
 impl MyApp {
@@ -138,6 +152,8 @@ impl MyApp {
             plugin_state: Arc::new(Mutex::new(PluginState::Initial)),
             available_plugins,
             active_plugin_index: init_plugin_idx,
+            theme_is_set: false,
+            main_frame: None,
         };
 
         app.try_load_plugin(init_plugin_idx);
@@ -200,6 +216,127 @@ impl MyApp {
         self.selected_token_index = None;
         self.active_plugin_index = plugin_index;
     }
+
+    fn set_theme(&mut self, ctx: &Context) {
+        let mut visuals = egui::Visuals::dark();
+        visuals.override_text_color = Some(PRIMARY_TEXT_COLOR);
+        visuals.window_fill = PRIMARY_BACKGROUND_COLOR;
+        visuals.interact_cursor = Some(egui::CursorIcon::PointingHand);
+        visuals.window_corner_radius = CornerRadius::ZERO;
+        visuals.window_shadow = egui::Shadow::NONE;
+        visuals.window_stroke = egui::Stroke::NONE;
+        visuals.indent_has_left_vline = false;
+        ctx.set_visuals(visuals);
+
+        let mut spacing = ctx.style().spacing.clone();
+        spacing.button_padding = egui::vec2(2.0, 2.0);
+        spacing.icon_spacing = 2.0;
+        spacing.item_spacing = egui::vec2(4.0, 4.0);
+        spacing.indent = 4.0;
+        spacing.menu_spacing = 2.0;
+        spacing.window_margin = egui::Margin {
+            left: 2,
+            right: 2,
+            top: 2,
+            bottom: 2,
+        };
+        ctx.style_mut(|style| style.spacing = spacing);
+
+        let mut style = (*ctx.style()).clone();
+        style.text_styles = [
+            (
+                egui::TextStyle::Heading,
+                egui::FontId::new(BIG_TEXT_SIZE, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Body,
+                egui::FontId::new(PRIMARY_TEXT_SIZE, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Button,
+                egui::FontId::new(PRIMARY_TEXT_SIZE, egui::FontFamily::Proportional),
+            ),
+            (
+                egui::TextStyle::Small,
+                egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
+            ),
+        ]
+        .into();
+        ctx.set_style(style);
+
+        self.main_frame = Some(egui::containers::Frame {
+            corner_radius: CornerRadius::ZERO,
+            fill: PRIMARY_BACKGROUND_COLOR,
+            inner_margin: egui::Margin {
+                left: 2,
+                right: 2,
+                top: 2,
+                bottom: 2,
+            },
+            outer_margin: egui::Margin {
+                left: 2,
+                right: 2,
+                top: 2,
+                bottom: 2,
+            },
+            shadow: egui::Shadow::NONE,
+            stroke: egui::Stroke::NONE,
+        });
+    }
+
+    fn display_token_header(
+        ui: &mut egui::Ui,
+        tokens: &Vec<Token>,
+        selected_token_idx: usize,
+    ) -> Option<usize> {
+        for (idx, token) in tokens.iter().enumerate() {
+            let mut label_text: RichText = RichText::new(&token.input_word).size(PRIMARY_TEXT_SIZE);
+            if token.is_valid() {
+                label_text = label_text.underline();
+                if idx != selected_token_idx {
+                    label_text = label_text.color(SECONDARY_TEXT_COLOR);
+                }
+
+                let text_size: egui::Vec2 = {
+                    let temp_galley: Arc<egui::Galley> = ui.fonts_mut(|f| {
+                        f.layout_no_wrap(
+                            label_text.text().to_string(),
+                            egui::FontId::proportional(PRIMARY_TEXT_SIZE),
+                            Color32::PLACEHOLDER,
+                        )
+                    });
+                    temp_galley.size()
+                };
+                let (background_rect, _) = ui.allocate_exact_size(text_size, egui::Sense::hover());
+                let label_rect: Rect = Rect::from_center_size(background_rect.center(), text_size);
+
+                let response = ui
+                    .scope_builder(egui::UiBuilder::new().max_rect(label_rect), |ui| {
+                        ui.label(label_text)
+                    })
+                    .inner;
+                if response.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    ui.painter().rect_filled(
+                        background_rect,
+                        CornerRadius::same(CORNER_RADIUS),
+                        Color32::from_rgba_premultiplied(
+                            SECONDARY_BACKGROUND_COLOR.r(),
+                            SECONDARY_BACKGROUND_COLOR.g(),
+                            SECONDARY_BACKGROUND_COLOR.b(),
+                            40,
+                        ),
+                    );
+                }
+                if response.clicked() {
+                    return Some(idx);
+                }
+            } else {
+                ui.label(label_text);
+            }
+        }
+        return None;
+    }
 }
 
 impl eframe::App for MyApp {
@@ -224,30 +361,16 @@ impl eframe::App for MyApp {
             }
         }
 
-        let main_frame = egui::containers::Frame {
-            corner_radius: CornerRadius::ZERO,
-            fill: Color32::from_rgb(27, 28, 29),
-            inner_margin: egui::Margin {
-                left: 2,
-                right: 2,
-                top: 2,
-                bottom: 2,
-            },
-            outer_margin: egui::Margin {
-                left: 2,
-                right: 2,
-                top: 2,
-                bottom: 2,
-            },
-            shadow: egui::Shadow::NONE,
-            stroke: egui::Stroke::NONE,
-        };
+        if !self.theme_is_set {
+            self.set_theme(ctx);
+            self.theme_is_set = true;
+        }
+
+        let main_frame = self.main_frame.unwrap();
 
         egui::CentralPanel::default()
             .frame(main_frame)
             .show(ctx, |ui| {
-                let available_height = ui.available_height();
-                let mut header_height = 42.0;
                 let footer_height = 42.0;
 
                 match &(*self.plugin_state.lock().unwrap()) {
@@ -268,37 +391,37 @@ impl eframe::App for MyApp {
                         }
                         let selected_token_idx: usize = self.selected_token_index.unwrap();
 
-                        let token_header = egui::ScrollArea::horizontal()
+                        egui::ScrollArea::horizontal()
                             .id_salt("token_header")
-                            //.max_height(header_height)
                             .show(ui, |ui| {
                                 if self.config.wrapped {
                                     ui.horizontal_wrapped(|ui| {
-                                        if let Some(idx) =
-                                            display_token_header(ui, tokens, selected_token_idx)
-                                        {
+                                        if let Some(idx) = Self::display_token_header(
+                                            ui,
+                                            tokens,
+                                            selected_token_idx,
+                                        ) {
                                             self.selected_token_index = Some(idx);
                                         }
                                     });
                                 } else {
                                     ui.horizontal(|ui| {
-                                        if let Some(idx) =
-                                            display_token_header(ui, tokens, selected_token_idx)
-                                        {
+                                        if let Some(idx) = Self::display_token_header(
+                                            ui,
+                                            tokens,
+                                            selected_token_idx,
+                                        ) {
                                             self.selected_token_index = Some(idx);
                                         }
                                     });
                                 }
 
-                                ui.add_space(10.0);
+                                ui.add_space(SPACING_SIZE);
                             });
 
-                        header_height = token_header.inner_rect.height();
-
                         ui.separator();
-                        let space_left = ui.available_height();
-                        let center_height = space_left - footer_height;
-                        println!("available: {}, header height: {}, footer height: {}, center height: {}, left: {}", available_height, header_height, footer_height, center_height, space_left);
+
+                        let center_height = ui.available_height() - footer_height;
                         egui::ScrollArea::vertical()
                             .id_salt("plugin_display_section")
                             .max_height(center_height)
@@ -314,7 +437,7 @@ impl eframe::App for MyApp {
                             });
                     }
                     _ => {
-                        let center_height = available_height - footer_height + 2.0;
+                        let center_height = ui.available_height() - footer_height;
                         ui.allocate_ui_with_layout(
                             egui::vec2(ui.available_width(), center_height),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
@@ -326,9 +449,9 @@ impl eframe::App for MyApp {
                                     // Any additional elements to be centered would go within this closure.
                                     let elements = |ui: &mut egui::Ui| {
                                         ui.spinner();
-                                        ui.add(egui::Label::new(
-                                            RichText::new("Loading Plugin...").size(20.0),
-                                        ));
+                                        ui.add(egui::Label::new(RichText::new(
+                                            "Loading Plugin...",
+                                        )));
                                     };
 
                                     // Create a new child Ui with the invisible flag set so that the element does not actually
@@ -346,7 +469,7 @@ impl eframe::App for MyApp {
                                     let diff: f32 = hidden.min_rect().width();
 
                                     // Add a space before rendering the element to the main screen.
-                                    ui.add_space((ui.max_rect().width() / 2.) - (diff / 2.));
+                                    ui.add_space((ui.max_rect().width() / 2.0) - (diff / 2.0));
                                     // Finally, render the elements to the main UI.
                                     elements(ui);
                                 });
@@ -356,123 +479,73 @@ impl eframe::App for MyApp {
                     }
                 }
 
-
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(ui.available_width(), footer_height),
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
-                    // Calculate right-side bar width
-                    let button_width: f32 = 18.0;
-                    let button_spacing: f32 = ui.spacing().item_spacing.x;
-                    let num_buttons: f32 = 3.0;
-                    let fixed_area_width = (button_width * num_buttons as f32)
-                        + (button_spacing * (num_buttons - 1.0))
-                        + button_spacing * 2.0;
+                        // Calculate right-side bar width
+                        let button_width: f32 = SPACING_SIZE * 2.0;
+                        let button_spacing: f32 = ui.spacing().item_spacing.x;
+                        let num_buttons: f32 = 3.0;
+                        let fixed_area_width = (button_width * num_buttons as f32)
+                            + (button_spacing * (num_buttons - 1.0))
+                            + button_spacing * 2.0;
 
-                    let available_width: f32 = ui.available_width() - fixed_area_width;
-                    egui::ScrollArea::horizontal()
-                        .id_salt("plugin_footer")
-                        .max_height(footer_height)
-                        .max_width(available_width)
-                        .show(ui, |ui| {
-                            ui.horizontal_centered(|ui| {
-                                let mut clicked_idx: Option<usize> = None;
-                                for (idx, active_plugin) in
-                                    self.available_plugins.iter().enumerate()
-                                {
-                                    if ui
-                                        .add(egui::Button::selectable(
-                                            self.active_plugin_index == idx,
-                                            RichText::new(active_plugin.name()).size(20.0),
-                                        ))
-                                        .clicked()
+                        let available_width: f32 = ui.available_width() - fixed_area_width;
+                        egui::ScrollArea::horizontal()
+                            .id_salt("plugin_footer")
+                            .max_height(footer_height)
+                            .max_width(available_width)
+                            .show(ui, |ui| {
+                                ui.horizontal_centered(|ui| {
+                                    let mut clicked_idx: Option<usize> = None;
+                                    for (idx, active_plugin) in
+                                        self.available_plugins.iter().enumerate()
                                     {
-                                        clicked_idx = Some(idx);
+                                        if ui
+                                            .add(egui::Button::selectable(
+                                                self.active_plugin_index == idx,
+                                                RichText::new(active_plugin.name()),
+                                            ))
+                                            .clicked()
+                                        {
+                                            clicked_idx = Some(idx);
+                                        }
                                     }
-                                }
-                                if let Some(idx) = clicked_idx {
-                                    if self.active_plugin_index != idx {
-                                        self.try_load_plugin(idx);
+                                    if let Some(idx) = clicked_idx {
+                                        if self.active_plugin_index != idx {
+                                            self.try_load_plugin(idx);
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
 
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add(egui::Button::new(RichText::new("⚙").size(16.0)))
-                            .clicked()
-                        {
-                            // Settings button
-                        }
-                        if ui
-                            .add(egui::Button::new(RichText::new("📋").size(16.0)))
-                            .clicked()
-                        {
-                            // Copy button
-                        }
-                        if ui
-                            .add(egui::Button::new(RichText::new("⭐").size(16.0)))
-                            .clicked()
-                        {
-                            if let PluginState::Ready(plugin) =
-                                &(*self.plugin_state.lock().unwrap())
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .add(egui::Button::new(RichText::new("⚙").size(SMALL_TEXT_SIZE)))
+                                .clicked()
                             {
-                                plugin.open(ctx);
+                                // Settings button
                             }
-                        }
-                    });
-                });
+                            if ui
+                                .add(egui::Button::new(RichText::new("📋").size(SMALL_TEXT_SIZE)))
+                                .clicked()
+                            {
+                                // Copy button
+                            }
+                            if ui
+                                .add(egui::Button::new(RichText::new("⭐").size(SMALL_TEXT_SIZE)))
+                                .clicked()
+                            {
+                                if let PluginState::Ready(plugin) =
+                                    &(*self.plugin_state.lock().unwrap())
+                                {
+                                    plugin.open(ctx);
+                                }
+                            }
+                        });
+                    },
+                );
             });
     }
-}
-
-fn display_token_header(
-    ui: &mut egui::Ui,
-    tokens: &Vec<Token>,
-    selected_token_idx: usize,
-) -> Option<usize> {
-    for (idx, token) in tokens.iter().enumerate() {
-        let font_size: f32 = 20.0;
-        let mut label_text: RichText = RichText::new(&token.input_word).size(font_size);
-        if token.is_valid() {
-            label_text = label_text.underline().color(Color32::GRAY);
-            if idx == selected_token_idx {
-                label_text = label_text.color(Color32::WHITE);
-            }
-
-            let text_size: egui::Vec2 = {
-                let temp_galley: Arc<egui::Galley> = ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        label_text.text().to_string(),
-                        egui::FontId::proportional(font_size),
-                        Color32::PLACEHOLDER,
-                    )
-                });
-                temp_galley.size()
-            };
-            let (background_rect, _) = ui.allocate_exact_size(text_size, egui::Sense::hover());
-            let label_rect: Rect = Rect::from_center_size(background_rect.center(), text_size);
-
-            let response = ui
-                .scope_builder(egui::UiBuilder::new().max_rect(label_rect), |ui| {
-                    ui.label(label_text)
-                })
-                .inner;
-            if response.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                ui.painter().rect_filled(
-                    background_rect,
-                    CornerRadius::same(4),
-                    Color32::from_rgba_premultiplied(40, 40, 40, 40),
-                );
-            }
-            if response.clicked() {
-                return Some(idx);
-            }
-        } else {
-            ui.label(label_text);
-        }
-    }
-    return None;
 }
