@@ -1,4 +1,6 @@
-use arboard::{Clipboard, GetExtLinux};
+use arboard::Clipboard;
+#[cfg(target_os = "linux")]
+use arboard::GetExtLinux;
 use enigo::{Enigo, Keyboard};
 use image::DynamicImage;
 use std::error::Error;
@@ -25,6 +27,7 @@ pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub fn primary(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
@@ -34,6 +37,7 @@ pub fn primary(config: app::Config) -> Result<(), Box<dyn Error>> {
     run(&sentence, config)
 }
 
+#[cfg(target_os = "linux")]
 pub fn secondary(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard

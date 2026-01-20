@@ -43,10 +43,12 @@ struct Action {
 
     /// Get input text from primary clipboard/selection (linux)
     #[arg(short = 'p', long = "primary")]
+    #[cfg(target_os = "linux")]
     primary: bool,
 
     /// Get input text from secondary clipboard/selection (linux)
     #[arg(short = 's', long = "secondary")]
+    #[cfg(target_os = "linux")]
     secondary: bool,
 
     /// Get input text from clipboard
@@ -84,55 +86,96 @@ fn main() -> ExitCode {
         initial_width: cli.initial_width.unwrap_or(450),
         initial_height: cli.initial_height.unwrap_or(450),
     };
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(text) = &cli.action.text {
+            if let Err(e) = popup_dictionary::run(&text, config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        } else if cli.action.primary {
+            if let Err(e) = popup_dictionary::primary(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        } else if cli.action.secondary {
+            if let Err(e) = popup_dictionary::secondary(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        } else if cli.action.clipboard {
+            if let Err(e) = popup_dictionary::clipboard(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        /*
+        } else if cli.action.copy {
+            if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
 
-    if let Some(text) = &cli.action.text {
-        if let Err(e) = popup_dictionary::run(&text, config) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    } else if cli.action.primary {
-        if let Err(e) = popup_dictionary::primary(config) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    } else if cli.action.secondary {
-        if let Err(e) = popup_dictionary::secondary(config) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    } else if cli.action.clipboard {
-        if let Err(e) = popup_dictionary::clipboard(config) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    /*
-    } else if cli.action.copy {
-        if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-
-    } else if cli.action.watch {
-        if let Err(e) = popup_dictionary::watch(config) {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    */
-    } else if let Some(ocr_path) = cli.action.ocr {
-        match get_image_for_ocr(ocr_path) {
-            Ok(image) => {
-                if let Err(e) = popup_dictionary::ocr(image, config) {
-                    eprintln!("Error: {e}");
+        } else if cli.action.watch {
+            if let Err(e) = popup_dictionary::watch(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        */
+        } else if let Some(ocr_path) = cli.action.ocr {
+            match get_image_for_ocr(ocr_path) {
+                Ok(image) => {
+                    if let Err(e) = popup_dictionary::ocr(image, config) {
+                        eprintln!("Error: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
                     return ExitCode::FAILURE;
                 }
             }
-            Err(e) => {
-                eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(text) = &cli.action.text {
+            if let Err(e) = popup_dictionary::run(&text, config) {
+                eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
+            }
+        } else if cli.action.clipboard {
+            if let Err(e) = popup_dictionary::clipboard(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        /*
+        } else if cli.action.copy {
+            if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+
+        } else if cli.action.watch {
+            if let Err(e) = popup_dictionary::watch(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
+            }
+        */
+        } else if let Some(ocr_path) = cli.action.ocr {
+            match get_image_for_ocr(ocr_path) {
+                Ok(image) => {
+                    if let Err(e) = popup_dictionary::ocr(image, config) {
+                        eprintln!("Error: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                    return ExitCode::FAILURE;
+                }
             }
         }
     }
-
     ExitCode::SUCCESS
 }
 
