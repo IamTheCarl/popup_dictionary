@@ -30,6 +30,7 @@ pub struct Config {
     pub wrapped: bool,
     pub initial_width: u16,
     pub initial_height: u16,
+    pub show_tray_icon: bool,
 }
 
 pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
@@ -82,6 +83,10 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 .with_title(APP_NAME),
             ..Default::default()
         };
+    }
+
+    if config.show_tray_icon {
+        crate::tray::spawn_tray_icon();
     }
 
     eframe::run_native(
@@ -165,9 +170,9 @@ impl MyApp {
         ctx.add_font(FontInsert::new(
             "NotoSansCJKJP",
             #[cfg(not(target_os = "windows"))]
-            egui::FontData::from_static(include_bytes!("./fonts/popup_font.ttc")), // Currently: Noto Sans CJK JP
+            egui::FontData::from_static(include_bytes!("./assets/popup_font.ttc")), // Currently: Noto Sans CJK JP
             #[cfg(target_os = "windows")]
-            egui::FontData::from_static(include_bytes!(".\\fonts\\popup_font.ttc")), // Currently: Noto Sans CJK JP
+            egui::FontData::from_static(include_bytes!(".\\assets\\popup_font.ttc")), // Currently: Noto Sans CJK JP
             vec![
                 InsertFontFamily {
                     family: egui::FontFamily::Proportional,

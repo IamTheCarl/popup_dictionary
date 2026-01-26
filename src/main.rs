@@ -32,6 +32,10 @@ struct Args {
     /// Initial window height in pixels. Default: 450
     #[arg(long = "height", value_name = "PIXELS")]
     initial_height: Option<u16>,
+
+    /// Show a tray icon
+    #[arg(long = "tray")]
+    show_tray_icon: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -85,6 +89,7 @@ fn main() -> ExitCode {
         wrapped: cli.wrapped,
         initial_width: cli.initial_width.unwrap_or(450),
         initial_height: cli.initial_height.unwrap_or(450),
+        show_tray_icon: cli.show_tray_icon,
     };
     #[cfg(target_os = "linux")]
     {

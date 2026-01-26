@@ -13,6 +13,7 @@ pub mod app;
 mod plugin;
 mod plugins;
 mod tesseract;
+mod tray;
 mod window_helper;
 
 pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
