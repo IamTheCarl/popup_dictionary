@@ -13,7 +13,6 @@ pub mod app;
 mod plugin;
 mod plugins;
 mod tesseract;
-mod tray;
 mod window_helper;
 
 pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
@@ -73,13 +72,27 @@ pub fn copy(initial_plugin: &Option<String>) -> Result<(), Box<dyn Error>> {
     clipboard(initial_plugin)
 }
 
+*/
 
 pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
     let mut clipboard: Clipboard = Clipboard::new()?;
-    let sentence: String = clipboard.get().text()?;
-    run(&sentence, config)
+    let mut initial_content: String = clipboard.get().text()?;
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let sentence: String = clipboard.get().text()?;
+        if initial_content != sentence {
+            println!("initial: {}, new: {}", initial_content, sentence);
+            if let Err(e) = run(&sentence, config.clone()) {
+                eprintln!("Error: {e}");
+            }
+            initial_content = clipboard.get().text()?;
+        }
+    }
+
+    Ok(())
 }
-*/
+
 pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error>> {
     if let Err(e) = check_tesseract() {
         eprintln!(

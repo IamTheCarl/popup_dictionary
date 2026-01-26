@@ -6,6 +6,8 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+mod tray;
+
 /// Simple Popup dictionary
 #[derive(Parser, Debug)]
 #[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(true))]
@@ -60,14 +62,14 @@ struct Action {
     clipboard: bool,
 
     /*
-    /// Copy text by simulating Ctrl+C and pass from clipboard as input text
-    #[arg(short = 'c', long = "copy")]
-    copy: bool,
-
+     /// Copy text by simulating Ctrl+C and pass from clipboard as input text
+     #[arg(short = 'c', long = "copy")]
+     copy: bool,
+    */
     /// Watch clipboard for newly copied text
     #[arg(short = 'w', long = "watch")]
     watch: bool,
-    */
+
     /// Use OCR mode. Reads image from path if provided, otherwise takes image data from stdin
     #[arg(short = 'o', long = "ocr", value_name = "PATH")]
     ocr: Option<Option<PathBuf>>,
@@ -91,6 +93,11 @@ fn main() -> ExitCode {
         initial_height: cli.initial_height.unwrap_or(450),
         show_tray_icon: cli.show_tray_icon,
     };
+
+    if config.show_tray_icon {
+        crate::tray::spawn_tray_icon();
+    }
+
     #[cfg(target_os = "linux")]
     {
         if let Some(text) = &cli.action.text {
@@ -114,18 +121,17 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         /*
-        } else if cli.action.copy {
-            if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
-                eprintln!("Error: {e}");
-                return ExitCode::FAILURE;
-            }
-
+             } else if cli.action.copy {
+                 if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
+                     eprintln!("Error: {e}");
+                     return ExitCode::FAILURE;
+                 }
+        */
         } else if cli.action.watch {
             if let Err(e) = popup_dictionary::watch(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        */
         } else if let Some(ocr_path) = cli.action.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
@@ -154,18 +160,17 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         /*
-        } else if cli.action.copy {
-            if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
-                eprintln!("Error: {e}");
-                return ExitCode::FAILURE;
-            }
-
+          } else if cli.action.copy {
+              if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
+                  eprintln!("Error: {e}");
+                  return ExitCode::FAILURE;
+              }
+        */
         } else if cli.action.watch {
             if let Err(e) = popup_dictionary::watch(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        */
         } else if let Some(ocr_path) = cli.action.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {

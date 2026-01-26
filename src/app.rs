@@ -24,6 +24,7 @@ pub const TINY_TEXT_SIZE: f32 = 14.0;
 pub const SPACING_SIZE: f32 = 10.0;
 pub const CORNER_RADIUS: u8 = 4;
 
+#[derive(Clone)]
 pub struct Config {
     pub initial_plugin: Option<String>,
     pub open_at_cursor: bool,
@@ -83,10 +84,6 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 .with_title(APP_NAME),
             ..Default::default()
         };
-    }
-
-    if config.show_tray_icon {
-        crate::tray::spawn_tray_icon();
     }
 
     eframe::run_native(
