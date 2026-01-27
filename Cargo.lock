@@ -3340,6 +3340,7 @@ dependencies = [
  "ksni",
  "log",
  "phf",
+ "regex",
  "serde",
  "serde_json",
  "sled",

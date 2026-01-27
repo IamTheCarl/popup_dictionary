@@ -3,8 +3,10 @@ use arboard::Clipboard;
 use arboard::GetExtLinux;
 use enigo::{Enigo, Keyboard};
 use image::DynamicImage;
+use regex::Regex;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use crate::app::run_app;
 use crate::tesseract::{check_tesseract, ocr_image};
@@ -22,9 +24,30 @@ pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
         return Err(Box::from("Input text must be at least one character."));
     }
 
+    if !contains_japanese(&sentence) {
+        return Err(Box::from("Input text must contain japanese text."));
+    }
+
     run_app(&sentence, config)?;
 
     Ok(())
+}
+
+fn contains_japanese(text: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+
+    let re = RE.get_or_init(|| {
+        Regex::new(concat!(
+            r"[",
+            r"\p{scx=Hiragana}",
+            r"\p{scx=Katakana}",
+            r"\p{scx=Han}", // Kanji, Hanzi, Hanja
+            r"]"
+        ))
+        .expect("Regex compilation failed")
+    });
+
+    re.is_match(text)
 }
 
 #[cfg(target_os = "linux")]
