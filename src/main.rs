@@ -52,7 +52,7 @@ struct Action {
     #[cfg(target_os = "linux")]
     primary: bool,
 
-    /// Get input text from secondary clipboard/selection (linux)
+    /// Get input text from secondary clipboard/selection (linux/x11)
     #[arg(short = 's', long = "secondary")]
     #[cfg(target_os = "linux")]
     secondary: bool,
@@ -66,7 +66,7 @@ struct Action {
      #[arg(short = 'c', long = "copy")]
      copy: bool,
     */
-    /// Watch clipboard for newly copied text
+    /// Watch clipboard for newly copied text or image data
     #[arg(short = 'w', long = "watch")]
     watch: bool,
 
