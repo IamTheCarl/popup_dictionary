@@ -13,36 +13,16 @@ mod tray;
 #[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(true))]
 struct Args {
     #[clap(flatten)]
-    action: Action,
+    modes: Modes,
 
-    /// Initial plugin to load. Available: "kihon", "jotoba"
-    #[arg(long = "initial-plugin", value_name = "PLUGIN")]
-    initial_plugin: Option<String>,
-
-    /// Try to open the window at the mouse cursor. Unlikely to work on wayland
-    #[arg(short = 'm', long = "at-mouse")]
-    open_at_cursor: bool,
-
-    /// Display input text in a text-box instead of in one line
-    #[arg(short = 'f', long = "full-text")]
-    wrapped: bool,
-
-    /// Initial window width in pixels. Default: 450
-    #[arg(long = "width", value_name = "PIXELS")]
-    initial_width: Option<u16>,
-
-    /// Initial window height in pixels. Default: 450
-    #[arg(long = "height", value_name = "PIXELS")]
-    initial_height: Option<u16>,
-
-    /// Show a tray icon
-    #[arg(long = "tray")]
-    show_tray_icon: bool,
+    #[clap(flatten)]
+    options: Options,
 }
 
 #[derive(clap::Args, Debug)]
+#[command(next_help_heading = "Modes")]
 #[group(required = true, multiple = false)]
-struct Action {
+struct Modes {
     /// Provide input text manually
     #[arg(short = 't', long = "text", value_name = "STRING")]
     text: Option<String>,
@@ -75,6 +55,34 @@ struct Action {
     ocr: Option<Option<PathBuf>>,
 }
 
+#[derive(clap::Args, Debug)]
+#[group(required = false, multiple = true)]
+struct Options {
+    /// Initial plugin to load. Available: "kihon", "jotoba"
+    #[arg(long = "initial-plugin", value_name = "PLUGIN", help_heading = None)]
+    initial_plugin: Option<String>,
+
+    /// Try to open the window at the mouse cursor. Unlikely to work on wayland
+    #[arg(short = 'm', long = "at-mouse", help_heading = None)]
+    open_at_cursor: bool,
+
+    /// Display input text in a text-box instead of in one line
+    #[arg(short = 'f', long = "full-text", help_heading = None)]
+    wrapped: bool,
+
+    /// Initial window width in pixels. Default: 450
+    #[arg(long = "width", value_name = "PIXELS", help_heading = None)]
+    initial_width: Option<u16>,
+
+    /// Initial window height in pixels. Default: 450
+    #[arg(long = "height", value_name = "PIXELS", help_heading = None)]
+    initial_height: Option<u16>,
+
+    /// Show a tray icon
+    #[arg(long = "tray", help_heading = None)]
+    show_tray_icon: bool,
+}
+
 fn main() -> ExitCode {
     #[cfg(debug_assertions)]
     env_logger::builder()
@@ -86,12 +94,12 @@ fn main() -> ExitCode {
     let cli: Args = Args::parse();
 
     let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
-        initial_plugin: cli.initial_plugin,
-        open_at_cursor: cli.open_at_cursor,
-        wrapped: cli.wrapped,
-        initial_width: cli.initial_width.unwrap_or(450),
-        initial_height: cli.initial_height.unwrap_or(450),
-        show_tray_icon: cli.show_tray_icon,
+        initial_plugin: cli.options.initial_plugin,
+        open_at_cursor: cli.options.open_at_cursor,
+        wrapped: cli.options.wrapped,
+        initial_width: cli.options.initial_width.unwrap_or(450),
+        initial_height: cli.options.initial_height.unwrap_or(450),
+        show_tray_icon: cli.options.show_tray_icon,
     };
 
     if config.show_tray_icon {
@@ -100,22 +108,22 @@ fn main() -> ExitCode {
 
     #[cfg(target_os = "linux")]
     {
-        if let Some(text) = &cli.action.text {
+        if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if cli.action.primary {
+        } else if cli.modes.primary {
             if let Err(e) = popup_dictionary::primary(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if cli.action.secondary {
+        } else if cli.modes.secondary {
             if let Err(e) = popup_dictionary::secondary(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if cli.action.clipboard {
+        } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
@@ -127,12 +135,12 @@ fn main() -> ExitCode {
                      return ExitCode::FAILURE;
                  }
         */
-        } else if cli.action.watch {
+        } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if let Some(ocr_path) = cli.action.ocr {
+        } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
