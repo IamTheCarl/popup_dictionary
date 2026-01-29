@@ -1,7 +1,6 @@
 use arboard::Clipboard;
 #[cfg(target_os = "linux")]
 use arboard::GetExtLinux;
-use enigo::{Enigo, Keyboard};
 use image::DynamicImage;
 use image::ImageBuffer;
 use image::ImageReader;

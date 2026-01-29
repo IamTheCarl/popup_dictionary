@@ -62,9 +62,9 @@ pub fn tokenize(
                 }
             }
         };
-        println!("{:?}", token.feature());
+        //println!("{:?}", token.feature());
         let conjform: String = token.feature().split(",").nth(3).unwrap_or("*").to_string();
-        println!("{:?}", conjform);
+        //println!("{:?}", conjform);
         words.push(Token {
             input_word: token.surface().to_string(),
             deinflected_word: token
@@ -138,7 +138,7 @@ fn improve_tokens(
                     "Error getting from database when looking up base: {}",
                     only_last_base
                 )) {
-                    println!("TRUE: {:?} {:? } {:?}", surface, base, only_last_base);
+                    //println!("TRUE: {:?} {:? } {:?}", surface, base, only_last_base);
                     base = only_last_base;
                     found_match = true;
                 }
@@ -150,13 +150,13 @@ fn improve_tokens(
                         .filter(|form| seen.insert(form.to_string()))
                         .cloned()
                         .collect();
-                    println!(
+                    /*println!(
                         "{:?},{:?},{:?},{:?}",
                         surface,
                         base,
                         combined_forms,
                         words[start_idx..end_idx].to_vec()
-                    );
+                    );*/
                     new_words.push(Token {
                         input_word: surface,
                         deinflected_word: base,
