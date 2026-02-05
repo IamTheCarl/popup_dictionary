@@ -31,13 +31,20 @@ pub fn tokenize(
     query: &String,
     dictionary: &crate::plugins::kihon_plugin::jmdict_dictionary::Dictionary,
 ) -> Result<Vec<Token>, Box<dyn Error>> {
-    let system_dic_path: PathBuf = match dirs::data_dir() {
-        Some(path) => path
-            .join("popup_dictionary")
-            .join("dicts")
-            .join("system.dic"),
+    let mut system_dic_path: PathBuf = match dirs::data_dir() {
+        Some(path) => path,
         None => Err("No valid data path found in environment variables.")?,
     };
+    system_dic_path = system_dic_path
+        .join("popup_dictionary")
+        .join("dicts")
+        .join("system.dic");
+    if !system_dic_path
+        .try_exists()
+        .is_ok_and(|verified| verified == true)
+    {
+        crate::plugins::kihon_plugin::dependencies::fetch_jumandic(&system_dic_path)?;
+    }
     let system_dic: File = File::open(system_dic_path)?;
     let reader: BufReader<File> = BufReader::new(system_dic);
     let dict: Dictionary = Dictionary::read(reader)?;
