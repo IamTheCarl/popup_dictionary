@@ -81,17 +81,27 @@ struct Options {
     /// Show a tray icon
     #[arg(long = "tray", help_heading = None)]
     show_tray_icon: bool,
+
+    /// Enable verbose logging
+    #[arg(long = "verbose")]
+    verbose: bool,
 }
 
 fn main() -> ExitCode {
+    let cli: Args = Args::parse();
+
     #[cfg(debug_assertions)]
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
     #[cfg(not(debug_assertions))]
-    env_logger::init();
-
-    let cli: Args = Args::parse();
+    if cli.options.verbose {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::max())
+            .init();
+    } else {
+        env_logger::init();
+    }
 
     let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
         initial_plugin: cli.options.initial_plugin,
