@@ -3,7 +3,7 @@ use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -169,13 +169,22 @@ impl Dictionary {
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
-        let jmdict_simplified_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path
-                .join("popup_dictionary")
-                .join("dicts")
-                .join("jmdict-simplified.json"),
+        let mut jmdict_simplified_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path,
             None => Err("No valid data path found in environment variables.")?,
         };
+        jmdict_simplified_path = jmdict_simplified_path
+            .join("popup_dictionary")
+            .join("dicts")
+            .join("jmdict-simplified.json");
+        if !jmdict_simplified_path
+            .try_exists()
+            .is_ok_and(|verified| verified == true)
+        {
+            crate::plugins::kihon_plugin::dependencies::fetch_jmdict_simplified(
+                &jmdict_simplified_path,
+            )?;
+        }
         let file: File = File::open(jmdict_simplified_path)?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
@@ -299,13 +308,23 @@ impl Dictionary {
 
     fn parse_leeds_frequencies() -> Result<HashMap<String, u32>, Box<dyn Error>> {
         let mut frequency_map: HashMap<String, u32> = HashMap::new();
-        let leeds_frequency_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path
-                .join("popup_dictionary")
-                .join("dicts")
-                .join("leeds-corpus-frequency.txt"),
+        let mut leeds_frequency_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path,
             None => Err("No valid data path found in environment variables.")?,
         };
+
+        leeds_frequency_path = leeds_frequency_path
+            .join("popup_dictionary")
+            .join("dicts")
+            .join("leeds-corpus-frequency.txt");
+        if !leeds_frequency_path
+            .try_exists()
+            .is_ok_and(|verified| verified == true)
+        {
+            crate::plugins::kihon_plugin::dependencies::fetch_leeds_frequencies(
+                &leeds_frequency_path,
+            )?;
+        }
         let file: File = File::open(leeds_frequency_path)?;
 
         // note: prone to overflow?
@@ -321,15 +340,33 @@ impl Dictionary {
     fn parse_jmdict_furigana() -> Result<HashMap<String, Vec<Furigana>>, Box<dyn Error>> {
         let mut furigana_map: HashMap<String, Vec<Furigana>> = HashMap::new();
 
-        let jmdict_furigana_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path
-                .join("popup_dictionary")
-                .join("dicts")
-                .join("jmdict-furigana.json"),
+        let mut jmdict_furigana_path: PathBuf = match dirs::data_dir() {
+            Some(path) => path,
             None => Err("No valid data path found in environment variables.")?,
         };
+        jmdict_furigana_path = jmdict_furigana_path
+            .join("popup_dictionary")
+            .join("dicts")
+            .join("jmdict-furigana.json");
+        if !jmdict_furigana_path
+            .try_exists()
+            .is_ok_and(|verified| verified == true)
+        {
+            crate::plugins::kihon_plugin::dependencies::fetch_jmdict_furigana(
+                &jmdict_furigana_path,
+            )?;
+        }
+
         let file: File = File::open(jmdict_furigana_path)?;
-        let json: Vec<JMDictFurigana> = serde_json::from_reader(BufReader::new(file))?;
+
+        // Handle BOM at file start
+        let mut reader = BufReader::new(file);
+        let mut bom = [0u8; 3];
+        if reader.read_exact(&mut bom).is_ok() && &bom != &[0xEF, 0xBB, 0xBF] {
+            reader.seek(SeekFrom::Start(0))?;
+        }
+
+        let json: Vec<JMDictFurigana> = serde_json::from_reader(reader)?;
 
         for jmdict_furigana in json {
             furigana_map.insert(
