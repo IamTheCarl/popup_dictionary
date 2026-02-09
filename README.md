@@ -1,15 +1,15 @@
 <h2 align="center">Popup Dictionary [WIP]</h2>
 
-This application is a WIP pop-up dictionary (currently for Japanese->English) that works outside your browser.  
+This application is a WIP **pop-up dictionary** (currently for Japanese->English) that works outside your browser.  
 
 It is inspired by tools like [Yomitan](https://github.com/yomidevs/yomitan), an incredibly useful browser extension that lets you look-up the definition of words with the press of a button.
-Since Yomitan only works in the browser, I decided to make a pop-up dictionary application that can be used outside the browser, utilizing methods like OCR or the system clipboard for looking up text.  
+Since Yomitan only works in the browser, I decided to make a pop-up dictionary application that can be used outside the browser, utilizing methods like **OCR or the system clipboard** for looking up text.  
 The main difference to something like Yomitan is that the look-up is not restricted to a single word, but you can copy/OCR a whole sentence or even full blocks of text and look-up the individual words.
 
 
 ## Installation
 > [!NOTE]\
-> Currently, the main focus of development is on Linux (x11 and wayland). Basic Windows support should already be there, however some features may or may not fully work until I get to it.
+> Currently, the main focus of development is on **Linux** (x11 and wayland). Basic **Windows** support should already be there, however some features may or may not fully work until I get to it.
 ### Linux
 [WIP]
 
