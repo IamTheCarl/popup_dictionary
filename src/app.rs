@@ -530,15 +530,26 @@ impl eframe::App for MyApp {
                                 // Settings button
                             }
                             if ui
-                                .add(egui::Button::new(RichText::new("📋").size(SMALL_TEXT_SIZE)))
+                                .add(egui::Button::new(
+                                    RichText::new("\u{1f4cb}").size(SMALL_TEXT_SIZE),
+                                ))
                                 .clicked()
                             {
                                 // Copy button
+                                let sentence: String = self.sentence.to_owned();
+                                std::thread::spawn(|| {
+                                    let mut clipboard: arboard::Clipboard =
+                                        arboard::Clipboard::new().unwrap();
+                                    clipboard.set_text(sentence).unwrap();
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+                                    drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                                });
                             }
                             if ui
-                                .add(egui::Button::new(RichText::new("⭐").size(SMALL_TEXT_SIZE)))
+                                .add(egui::Button::new(RichText::new("ℹ").size(SMALL_TEXT_SIZE)))
                                 .clicked()
                             {
+                                // Special button
                                 if let PluginState::Ready(plugin) =
                                     &(*self.plugin_state.lock().unwrap())
                                 {

@@ -13,6 +13,9 @@ use crate::plugins::kihon_plugin::jmdict_dictionary::{
 };
 use crate::plugins::kihon_plugin::jumandic_tokenizer::tokenize;
 
+const ATTRIBUTIONS_URL: &str =
+    "https://github.com/jasmine-blush/popup_dictionary?tab=readme-ov-file#licensing--attributions";
+
 pub struct KihonPlugin {
     tokens: Vec<Token>,
     dictionary: Dictionary,
@@ -132,7 +135,12 @@ impl Plugin for KihonPlugin {
         });
     }
 
-    fn open(&self, ctx: &egui::Context) {}
+    fn open(&self, ctx: &egui::Context) {
+        ctx.open_url(egui::output::OpenUrl {
+            url: String::from(ATTRIBUTIONS_URL),
+            new_tab: true,
+        });
+    }
 }
 
 impl KihonPlugin {
