@@ -17,7 +17,9 @@ The main difference to something like Yomitan is that the look-up is not restric
 [WIP]
 
 ## Usage
-[WIP]
+https://github.com/user-attachments/assets/df14e686-d6c0-497a-87ff-5e320c2e02e2
+
+https://github.com/user-attachments/assets/33a60c3a-f775-4ef4-99d8-dd7cbb0fe1f2
 
 ## Building
 This project is developed in 🔥blazingly-fast, memory-safe🔥 Rust. Building and running it from source should be relatively simple using the Rust toolchain/Cargo. You can find installation instructions here [rustup.rs](https://rustup.rs/).
