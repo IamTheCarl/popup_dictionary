@@ -1,4 +1,4 @@
-<h2 align="center">Popup Dictionary [WIP]</h2>
+<h2 align="center">Popup Dictionary</h2>
 
 This application is a WIP **pop-up dictionary** (currently for Japanese->English) that works outside your browser.  
 
@@ -9,17 +9,39 @@ The main difference to something like Yomitan is that the look-up is not restric
 
 ## Installation
 > [!NOTE]\
-> Currently, the main focus of development is on **Linux** (x11 and wayland). Basic **Windows** support should already be there, however some features may or may not fully work until I get to it.
+> Currently, the main focus of development is on **Linux** (X11 and Wayland). Basic **Windows** support should already be there, however some features may or may not fully work until I get to it.
 ### Linux
-[WIP]
+Head over to the **Releases** tab and pick out the binary/archive matching your system.
+For Linux, there are three different versions:
+- **Generic Linux**: This one can be used on any Linux environment (X11 or Wayland).
+- **Wayland**: Same as the regular Linux one but with better Wayland support.
+- **Hyprland**: Same again but with better Hyprland support.
+
+Once downloaded, simply extract the archive and execute the contained binary with appropriate arguments. Using ``--help`` or providing no arguments will output the usage instructions and a summary of available command-line options.
+#### OCR
+In order to use **OCR mode**, the OCR engine ``tesseract`` needs to be installed on your system and be in your **PATH**. A package for tesseract should be available on most Linux distributions (e.g., via ``apt install tesseract-ocr`` on **Debian/Ubuntu**, ``dnf install tesseract`` on **Fedora**, or ``pacman -S tesseract`` on **Arch Linux**).
+
+Additionally, the **English**, **Japanese** (for horizontal text) and **Japanese Vertical** (for vertical text) language packs need to be installed. This can usually be done via commands like this:
+- **Debian/Ubuntu**: ``sudo apt install tesseract-ocr-eng tesseract-ocr-jpn tesseract-ocr-jpn-vert``
+- **Fedora**: ``sudo dnf install tesseract-langpack-eng tesseract-langpack-jpn tesseract-langpack-jpn_vert``
+- **Arch Linux**: ``sudo pacman -S tesseract-data-eng tesseract-data-jpn tesseract-data-jpn_vert``
+
+Afterwards, you can verify that everything was installed correctly using:
+```sh
+tesseract --list-langs
+```
 
 ### Windows
 [WIP]
+Download the windows archive and extract, run the executable in CMD or Powershell to see help/arguments.
+Make sure tesseract and English, Japanese and Japanese Vertical languages are installed if you want to use OCR.
 
 ## Usage
 https://github.com/user-attachments/assets/df14e686-d6c0-497a-87ff-5e320c2e02e2
 
 https://github.com/user-attachments/assets/33a60c3a-f775-4ef4-99d8-dd7cbb0fe1f2
+
+[WIP]
 
 ## Building
 This project is developed in 🔥blazingly-fast, memory-safe🔥 Rust. Building and running it from source should be relatively simple using the Rust toolchain/Cargo. You can find installation instructions here [rustup.rs](https://rustup.rs/).
