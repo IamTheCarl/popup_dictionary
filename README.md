@@ -45,14 +45,18 @@ https://github.com/user-attachments/assets/33a60c3a-f775-4ef4-99d8-dd7cbb0fe1f2
 The program must be launched in exactly one of **six different modes**. These modes determine how the popup dictionary receives the input text you would like to look up.
 You can choose a mode using one of the following arguments:
 - ``--text`` or ``-t``: Put some text after this argument (don't forget quotation marks if your text includes spaces) to pass it directly to the program.
-  - Example: ``popup_dictionary --text ""
+  - Example: ``popup_dictionary --text "太陽が属している銀河系では"``
 - ``--primary`` or ``-p``: In this mode, any text that is currently in the **primary selection** is taken and passed to the program. This is **Linux-only** and may or may not work on Wayland depending on your compositor. The primary selection usually contains any text you have **currently highlighted** (e.g. with your mouse).
 - ``--secondary`` or ``-s``: In this mode, any text that is currently in the **secondary selection** is taken and passed to the program. This is **X11-only** and is rarely implemented/used.
 - ``--clipboard`` or ``-b``: In this mode, any text that is currently in your **main clipboard** is taken and passed to the program. This uses what you would usually call the "clipboard" on any OS.
-- ``--ocr`` or ``-o``: In this mode, the OCR engine ``tesseract`` is used to parse text from an input image. You can either specify the path to an image file after this argument, or you can pipe in **raw image data** from ``stdin``. More information in the OCR sub-section below.
+- ``--ocr`` or ``-o``: In this mode, the OCR engine ``tesseract`` is used to parse text from an input image. You can either specify the **path to an image** file after this argument, or you can pipe in **raw image data** from ``stdin``.
+  - Example: ``popup_dictionary --ocr ~/Pictures/japanese_text.png`` or ``hyprshot -m region -r -- | popup_dictionary --ocr``
 - ``--watch`` or ``-w``: In this mode, the program stays running in the background and waits for any **valid text** or **raw image data** to enter the **main clipboard**. When either of those is detected, the popup dictionary window opens using either the text as input or running OCR mode on the image. If the popup dictionary window is then closed again, the program stays running in the background and waiting for new valid clipboard content. Specifying the option ``--tray`` can be useful in this mode, as this allows you to easily end the background process via the tray icon.
 
-### OCR
+### Easy Usage Example
+There's two main ways you can easily use this as a popup dictionary similar to something like Yomitan:
+1. Create a **.desktop file** (or **shortcut** on Windows) that executes the application using watcher mode like: ``popup_dictionary --watch --tray``. Then, when you're about to e.g. read a book in Japanese, you can just launch the shortcut and keep copying or screenshotting text in the book to look things up whenever needed. Once you're done reading, simply close the application via the tray icon.
+2. Assign **keybindings** to the commands ``popup_dictionary --clipboard`` and/or ``hyprshot -m region -r -- | popup_dictionary --ocr`` (replacing ``hyprshot`` with your preferred screenshot tool). This way you can copy any Japanese text, then press your keybind to open it in the popup dictionary; or press the second keybind to screenshot any Japanese text and open it in the popup dictionary.
 
 ## Building
 This project is developed in 🔥blazingly-fast, memory-safe🔥 Rust. Building and running it from source should be relatively simple using the Rust toolchain/Cargo. You can find installation instructions here [rustup.rs](https://rustup.rs/).
