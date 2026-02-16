@@ -41,6 +41,9 @@ https://github.com/user-attachments/assets/df14e686-d6c0-497a-87ff-5e320c2e02e2
 
 https://github.com/user-attachments/assets/33a60c3a-f775-4ef4-99d8-dd7cbb0fe1f2
 
+> [!NOTE]\
+> When first launching the application with the default plugin (Kihon), four datasets totalling around ~280MB are downloaded and a database generated under ``~/.local/share/popup_dictionary/`` (Linux) or [WIP] Windows. This may take a few minutes depending on your internet connection and device specifications. The ``dicts/system.dic`` file is necessary for tokenization everytime the Kihon plugin is used, while the other three files in ``dicts/`` can be safely deleted after a successful first launch, if you so wish.
+
 ### Modes
 The program must be launched in exactly one of **six different modes**. These modes determine how the popup dictionary receives the input text you would like to look up.
 You can choose a mode using one of the following arguments:
