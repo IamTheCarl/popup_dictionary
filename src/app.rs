@@ -58,7 +58,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                             config.initial_height as f32,
                         ])
                         .with_min_inner_size([100.0, 100.0])
-                        .with_title(APP_NAME),
+                        .with_title(APP_NAME)
+                        .with_active(true),
                     ..Default::default()
                 };
             }
@@ -71,7 +72,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                             config.initial_height as f32,
                         ])
                         .with_min_inner_size([100.0, 100.0])
-                        .with_title(APP_NAME),
+                        .with_title(APP_NAME)
+                        .with_active(true),
                     ..Default::default()
                 };
             }
@@ -81,7 +83,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([config.initial_width as f32, config.initial_height as f32])
                 .with_min_inner_size([100.0, 100.0])
-                .with_title(APP_NAME),
+                .with_title(APP_NAME)
+                .with_active(true),
             ..Default::default()
         };
     }
@@ -366,6 +369,10 @@ impl eframe::App for MyApp {
         if !self.theme_is_set {
             self.set_theme(ctx);
             self.theme_is_set = true;
+
+            // theme_is_set basically acts like "just on first frame".
+            // set window to focused on first frame (Windows)
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
 
         let main_frame = self.main_frame.unwrap();

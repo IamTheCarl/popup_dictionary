@@ -11,6 +11,19 @@ mod tray;
 /// Simple Popup dictionary
 #[derive(Parser, Debug)]
 #[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(true))]
+#[cfg(target_os = "linux")]
+struct Args {
+    #[clap(flatten)]
+    modes: Modes,
+
+    #[clap(flatten)]
+    options: Options,
+}
+
+/// Simple Popup dictionary
+#[derive(Parser, Debug)]
+#[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(false))]
+#[cfg(target_os = "windows")]
 struct Args {
     #[clap(flatten)]
     modes: Modes,
@@ -22,17 +35,18 @@ struct Args {
 #[derive(clap::Args, Debug)]
 #[command(next_help_heading = "Modes")]
 #[group(required = true, multiple = false)]
+#[cfg(target_os = "linux")]
 struct Modes {
     /// Provide input text manually
     #[arg(short = 't', long = "text", value_name = "STRING")]
     text: Option<String>,
 
-    /// Get input text from primary clipboard/selection (linux)
+    /// Get input text from primary clipboard/selection
     #[arg(short = 'p', long = "primary")]
     #[cfg(target_os = "linux")]
     primary: bool,
 
-    /// Get input text from secondary clipboard/selection (linux/x11)
+    /// Get input text from secondary clipboard/selection (x11)
     #[arg(short = 's', long = "secondary")]
     #[cfg(target_os = "linux")]
     secondary: bool,
@@ -41,11 +55,38 @@ struct Modes {
     #[arg(short = 'b', long = "clipboard")]
     clipboard: bool,
 
-    /*
-     /// Copy text by simulating Ctrl+C and pass from clipboard as input text
-     #[arg(short = 'c', long = "copy")]
-     copy: bool,
-    */
+    /// Watch clipboard for newly copied text or image data
+    #[arg(short = 'w', long = "watch")]
+    watch: bool,
+
+    /// Use OCR mode. Reads image from path if provided, otherwise takes image data from stdin
+    #[arg(short = 'o', long = "ocr", value_name = "PATH")]
+    ocr: Option<Option<PathBuf>>,
+}
+
+#[derive(clap::Args, Debug)]
+#[command(next_help_heading = "Modes")]
+#[group(required = false, multiple = false)]
+#[cfg(target_os = "windows")]
+struct Modes {
+    /// Provide input text manually
+    #[arg(short = 't', long = "text", value_name = "STRING")]
+    text: Option<String>,
+
+    /// Get input text from primary clipboard/selection
+    #[arg(short = 'p', long = "primary")]
+    #[cfg(target_os = "linux")]
+    primary: bool,
+
+    /// Get input text from secondary clipboard/selection (x11)
+    #[arg(short = 's', long = "secondary")]
+    #[cfg(target_os = "linux")]
+    secondary: bool,
+
+    /// Get input text from clipboard
+    #[arg(short = 'b', long = "clipboard")]
+    clipboard: bool,
+
     /// Watch clipboard for newly copied text or image data
     #[arg(short = 'w', long = "watch")]
     watch: bool,
@@ -83,7 +124,7 @@ struct Options {
     show_tray_icon: bool,
 
     /// Enable verbose logging
-    #[arg(long = "verbose")]
+    #[arg(long = "verbose", help_heading = None)]
     verbose: bool,
 }
 
@@ -112,12 +153,12 @@ fn main() -> ExitCode {
         show_tray_icon: cli.options.show_tray_icon,
     };
 
-    if config.show_tray_icon {
-        crate::tray::spawn_tray_icon();
-    }
-
     #[cfg(target_os = "linux")]
     {
+        if config.show_tray_icon {
+            crate::tray::spawn_tray_icon();
+        }
+
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
                 eprintln!("Error: {e}");
@@ -138,13 +179,6 @@ fn main() -> ExitCode {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        /*
-             } else if cli.action.copy {
-                 if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
-                     eprintln!("Error: {e}");
-                     return ExitCode::FAILURE;
-                 }
-        */
         } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
                 eprintln!("Error: {e}");
@@ -167,29 +201,22 @@ fn main() -> ExitCode {
     }
     #[cfg(target_os = "windows")]
     {
-        if let Some(text) = &cli.action.text {
+        if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if cli.action.clipboard {
+        } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        /*
-          } else if cli.action.copy {
-              if let Err(e) = popup_dictionary::copy(&cli.initial_plugin) {
-                  eprintln!("Error: {e}");
-                  return ExitCode::FAILURE;
-              }
-        */
-        } else if cli.action.watch {
+        } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
                 eprintln!("Error: {e}");
                 return ExitCode::FAILURE;
             }
-        } else if let Some(ocr_path) = cli.action.ocr {
+        } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
@@ -201,6 +228,15 @@ fn main() -> ExitCode {
                     eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
                     return ExitCode::FAILURE;
                 }
+            }
+        } else {
+            // Default to watch mode with tray icon if no arguments given on Windows
+            if !config.show_tray_icon {
+                crate::tray::spawn_tray_icon();
+            }
+            if let Err(e) = popup_dictionary::watch(config) {
+                eprintln!("Error: {e}");
+                return ExitCode::FAILURE;
             }
         }
     }
