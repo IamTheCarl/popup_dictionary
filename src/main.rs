@@ -1,3 +1,11 @@
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::Console::AttachConsole;
+
 use clap::Parser;
 use image::DynamicImage;
 use image::ImageReader;
@@ -128,7 +136,19 @@ struct Options {
     verbose: bool,
 }
 
+const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+
 fn main() -> ExitCode {
+    // Try to attach to console on Windows
+    #[cfg(target_os = "windows")]
+    unsafe {
+        if AttachConsole(ATTACH_PARENT_PROCESS) != 0 {
+            use std::fs::File;
+            use std::io::{stderr, stdout};
+            use std::os::windows::io::FromRawHandle;
+        }
+    }
+
     let cli: Args = Args::parse();
 
     #[cfg(debug_assertions)]
