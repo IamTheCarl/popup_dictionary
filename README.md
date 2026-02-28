@@ -34,7 +34,15 @@ tesseract --list-langs
 ### Windows
 [WIP]
 Download the windows archive and extract, run the executable in CMD or Powershell to see help/arguments.
-Make sure tesseract and English, Japanese and Japanese Vertical languages are installed if you want to use OCR.
+On Windows, launching the executable with no arguments (e.g. by just double-clicking the .exe) starts the application in watch mode with tray icon.  
+
+Make sure tesseract and English, Japanese and Japanese Vertical languages are installed if you want to use OCR.  
+To install tesseract on Windows, download the installer here: [tesseract-ocr-w64-setup-5.5.0.20241111.exe](https://github.com/tesseract-ocr/tesseract/releases/download/5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe).  
+In the installer, select at least these features to be able to use OCR mode:  
+
+<img width="499" height="388" alt="windows_tesseract1" src="https://github.com/user-attachments/assets/a611741c-4f9c-4e47-b657-3e0adfd9296b" />
+<img width="499" height="388" alt="windows_tesseract2" src="https://github.com/user-attachments/assets/1c4bcd9b-8008-49d4-8050-318039ff4c4e" />
+
 
 ## Usage
 https://github.com/user-attachments/assets/df14e686-d6c0-497a-87ff-5e320c2e02e2
