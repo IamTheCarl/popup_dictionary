@@ -64,6 +64,16 @@ You can choose a mode using one of the following arguments:
   - Example: ``popup_dictionary --ocr ~/Pictures/japanese_text.png`` or ``hyprshot -m region -r -- | popup_dictionary --ocr``
 - ``--watch`` or ``-w``: In this mode, the program stays running in the background and waits for any **valid text** or **raw image data** to enter the **main clipboard**. When either of those is detected, the popup dictionary window opens using either the text as input or running OCR mode on the image. If the popup dictionary window is then closed again, the program stays running in the background and waiting for new valid clipboard content. Specifying the option ``--tray`` can be useful in this mode, as this allows you to easily end the background process via the tray icon.
 
+### Plugins
+[WIP]
+There are currently two "Plugins" you can use for looking up text:
+- The **Kihon** plugin is the default when launching the application. It runs entirely locally on your machine (after the initial one-time dataset download) and uses a mix of hand-picked methods and dictionaries for tokenization and looking up words.
+- The **Jotoba** plugin uses the API of the website [jotoba.de](https://jotoba.de/) for both tokenization and looking up words. To use it, you need an active internet connection.
+
+More plugins will be added in the future, as well as the Kihon plugin improved and expanded on.
+
+By using the ``--initial-plugin`` argument, you can specify which plugin the application should start with.
+
 ### Easy Usage Example
 There's two main ways you can easily use this as a popup dictionary similar to something like Yomitan:
 1. Create a **.desktop file** (or **shortcut** on Windows) that executes the application using watcher mode like: ``popup_dictionary --watch --tray``. Then, when you're about to e.g. read a book in Japanese, you can just launch the shortcut and keep copying or screenshotting text in the book to look things up whenever needed. Once you're done reading, simply close the application via the tray icon.
@@ -104,6 +114,10 @@ All in all, a command could look something like this:
    ```sh
    cargo run --release --features wayland-support -- --watch --tray
    ```
+
+## Troubleshooting
+[WIP]
+
 ## Licensing & Attributions
 This project is licensed under the **GNU General Public License v3.0**.
 
@@ -119,3 +133,5 @@ When using the ``Kihon`` plugin, the following is used:
  - **Vibrato:** The Vibrato tokenizer provided by [**daac-tools/vibrato**](https://github.com/daac-tools/vibrato) under the **MIT License**. For tokenization the [jumandic-mecab-7_0](https://github.com/daac-tools/vibrato/releases/download/v0.5.0/jumandic-mecab-7_0.tar.xz) file is downloaded (if not already present).
 
    - **JumanDIC:** The JumanDIC is the property of **Kyoto University** and is provided at [ku-nlp/JumanDIC](https://github.com/ku-nlp/JumanDIC).
+
+The ``Jotoba`` plugin uses the API of the website [jotoba.de](https://jotoba.de/). Jotoba is an amazing multilingual Japanese dictionary website, please check it out! A big Thank You to the creators of Jotoba for their great [API implementation](https://jotoba.de/docs.html)!
