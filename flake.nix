@@ -68,6 +68,8 @@
             # Needed for the unit tests.
             LD_LIBRARY_PATH = lib.makeLibraryPath runtimeInputs;
             
+            cargoExtraArgs = "--all-features";
+
             inherit src;
             strictDeps = true;
           };
