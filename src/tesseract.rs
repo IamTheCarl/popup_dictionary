@@ -4,15 +4,28 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-pub fn check_tesseract() -> Result<(), Box<dyn Error>> {
-    Command::new("tesseract").arg("--version").output()?;
-    Ok(())
+const TESS_PATH_WINDOWS: &str = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe";
+
+pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
+    if let Err(e) = Command::new("tesseract").arg("--version").output() {
+        #[cfg(target_os = "linux")]
+        return Err(Box::new(e));
+        // tesseract installer on Windows doesn't set PATH automatically, check default dir without PATH
+        #[cfg(target_os = "windows")]
+        {
+            Command::new(TESS_PATH_WINDOWS).arg("--version").output()?;
+            return Ok(String::from(
+                "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+            ));
+        }
+    }
+    return Ok(String::from("tesseract"));
 }
 
 pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
-    check_tesseract()?;
+    let tess_command: String = check_tesseract()?;
 
-    let ver_conf_command = Command::new("tesseract")
+    let ver_conf_command = Command::new(&tess_command)
         .arg("stdin")
         .arg("stdout")
         .arg("-l")
@@ -26,7 +39,7 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
         .spawn()?;
     match get_conf(ver_conf_command, image_data) {
         Ok(ver_conf) => {
-            let hor_conf_command = Command::new("tesseract")
+            let hor_conf_command = Command::new(&tess_command)
                 .arg("stdin")
                 .arg("stdout")
                 .arg("-l")
@@ -38,7 +51,7 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
                 .spawn()?;
             let hor_conf: f32 = get_conf(hor_conf_command, image_data)?;
             if hor_conf >= ver_conf {
-                let hor_command = Command::new("tesseract")
+                let hor_command = Command::new(&tess_command)
                     .arg("stdin")
                     .arg("stdout")
                     .arg("-l")
@@ -50,7 +63,7 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
                 let text = get_text(hor_command, image_data)?;
                 Ok(text)
             } else {
-                let ver_command = Command::new("tesseract")
+                let ver_command = Command::new(&tess_command)
                     .arg("stdin")
                     .arg("stdout")
                     .arg("-l")
@@ -69,7 +82,7 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
             eprintln!(
                 "Couldn't parse vertical text. Make sure you have jpn_vert.traineddata installed if you want vertical text support."
             );
-            let hor_command = Command::new("tesseract")
+            let hor_command = Command::new(&tess_command)
                 .arg("stdin")
                 .arg("stdout")
                 .arg("-l")
