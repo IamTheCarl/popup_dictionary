@@ -47,7 +47,7 @@ pub fn spawn_tray_icon() {
 
             unsafe {
                 let mut msg: MSG = std::mem::zeroed();
-                while GetMessageW(&mut msg, 0, 0, 0) != 0 {
+                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) != 0 {
                     if let Ok(event) = MenuEvent::receiver().try_recv() {
                         if event.id == quit_item.id() {
                             std::process::exit(0);
