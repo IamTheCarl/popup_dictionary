@@ -157,7 +157,7 @@ impl MyApp {
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
-        Self::load_main_font(&cc.egui_ctx);
+        crate::font_helper::load_main_font(&cc.egui_ctx);
 
         let available_plugins: Vec<Plugins> = Plugins::all();
 
@@ -190,6 +190,7 @@ impl MyApp {
         app
     }
 
+    /*
     fn load_main_font(ctx: &Context) {
         ctx.add_font(FontInsert::new(
             "NotoSansCJKJP",
@@ -208,7 +209,7 @@ impl MyApp {
                 },
             ],
         ));
-    }
+    }*/
 
     fn try_load_plugin(&mut self, plugin_index: usize) {
         tracing::info!(

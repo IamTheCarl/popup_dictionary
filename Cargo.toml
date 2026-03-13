@@ -41,6 +41,7 @@ x11rb = "0.13.2"                                         # x11 connection for wi
 image = "0.25.9"                                         # ocr, tray icon
 tokio = "1.49.0"                                         # tray icon background thread
 regex = "1.12.2"                                         # input text japanese check
+font-kit = "0.14.3"                                      # check system fonts
 
 [target.'cfg(unix)'.dependencies]
 # tray icon

@@ -16,6 +16,7 @@ use crate::app::run_app;
 use crate::tesseract::{check_tesseract, ocr_image};
 
 pub mod app;
+mod font_helper;
 mod plugin;
 mod plugins;
 mod tesseract;

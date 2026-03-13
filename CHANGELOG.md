@@ -13,9 +13,11 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Docs:** A `CHANGELOG.md` for easier tracking of changes.
 - **CLI:** A `--log-file` argument allowing for verbose logging to a file.
-- **Kihon:** Three datasets needed only for initial database generation will now
-  be automatically cleaned up afterwards.
+- **Kihon:** A post-generation cleanup step that deletes three dataset files
+  needed only for initial database population.
 - **Core:** More and improved logging throughout the codebase.
+- **Core:** A custom font loading mechanism that checks for supported fonts on
+  the system, if none are found a default font is downloaded.
 
 ### Changed
 
@@ -25,7 +27,12 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Removed
 
+- **Internal:** The statically linked default font. This effectively reduces the
+  size of the binary/executable by ~30MiB.
+
 ### Fixed
+
+- **Internal:** A duplicate check for whether Tesseract is installed.
 
 ### Security
 
