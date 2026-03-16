@@ -10,7 +10,10 @@ use regex::Regex;
 use std::error::Error;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use crate::app::run_app;
 use crate::tesseract::{check_tesseract, ocr_image};
@@ -120,15 +123,28 @@ struct ClipboardContent {
     text: Option<String>,
 }
 
-pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
+pub fn watch(config: app::Config, paused: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run watch mode.");
 
     let mut clipboard: Clipboard = Clipboard::new()?;
     let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
 
     tracing::info!("Watching...");
+    let mut was_paused = false;
     loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
+
+        if paused.load(Ordering::Relaxed) {
+            was_paused = true;
+            continue;
+        }
+        if was_paused {
+            // Replace initial_content with current here to prevent acting on clipboard content
+            // that was copied while paused.
+            initial_content = get_clipboard_content(&mut clipboard);
+            was_paused = false;
+        }
+
         let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
         if clipboard_content_differs(&initial_content, &current_content) {
             tracing::info!("New clipboard content detected.");

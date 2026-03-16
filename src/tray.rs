@@ -1,4 +1,6 @@
-pub fn spawn_tray_icon() {
+use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
+
+pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
     tracing::info!("Spawning tray icon.");
 
     #[cfg(target_os = "linux")]
@@ -11,7 +13,7 @@ pub fn spawn_tray_icon() {
                 .unwrap();
 
             rt.block_on(async {
-                let tray = MyTray;
+                let tray = MyTray { paused };
                 let _handle = tray.spawn().await.unwrap();
 
                 std::future::pending::<()>().await;
@@ -20,7 +22,7 @@ pub fn spawn_tray_icon() {
     }
     #[cfg(target_os = "windows")]
     {
-        std::thread::spawn(|| {
+        std::thread::spawn(move || {
             use tray_icon::{
                 Icon, TrayIconBuilder,
                 menu::{Menu, MenuEvent, MenuItem},
@@ -37,7 +39,9 @@ pub fn spawn_tray_icon() {
             let icon = Icon::from_rgba(image.into_raw(), width, height).unwrap();
 
             let tray_menu = Menu::new();
+            let pause_item = MenuItem::new("Pause", true, None);
             let quit_item = MenuItem::new("Exit", true, None);
+            tray_menu.append(&pause_item).unwrap();
             tray_menu.append(&quit_item).unwrap();
 
             let tray = TrayIconBuilder::new()
@@ -53,6 +57,15 @@ pub fn spawn_tray_icon() {
                     if let Ok(event) = MenuEvent::receiver().try_recv() {
                         if event.id == quit_item.id() {
                             std::process::exit(0);
+                        } else if event.id == pause_item.id() {
+                            let was_paused = paused.fetch_xor(true, Ordering::Relaxed);
+                            if was_paused {
+                                tracing::info!("Resuming watcher.");
+                                pause_item.set_text("Pause");
+                            } else {
+                                tracing::info!("Pausing watcher.");
+                                pause_item.set_text("Resume");
+                            }
                         }
                     }
 
@@ -66,7 +79,9 @@ pub fn spawn_tray_icon() {
 
 #[derive(Debug)]
 #[cfg(target_os = "linux")]
-struct MyTray;
+struct MyTray {
+    paused: Arc<AtomicBool>,
+}
 
 #[cfg(target_os = "linux")]
 impl ksni::Tray for MyTray {
@@ -96,7 +111,22 @@ impl ksni::Tray for MyTray {
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
+        let is_paused = self.paused.load(Ordering::Relaxed);
+        let pause_label = if is_paused { "Resume" } else { "Pause" };
         vec![
+            StandardItem {
+                label: pause_label.into(),
+                activate: Box::new(|this: &mut Self| {
+                    let was_paused = this.paused.fetch_xor(true, Ordering::Relaxed);
+                    if was_paused {
+                        tracing::info!("Resuming watcher.");
+                    } else {
+                        tracing::info!("Pausing watcher.");
+                    }
+                }),
+                ..Default::default()
+            }
+            .into(),
             StandardItem {
                 label: "Exit".into(),
                 activate: Box::new(|_| {
