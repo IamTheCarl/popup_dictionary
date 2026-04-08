@@ -27,19 +27,21 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Changed
 
-- **Internal:** Migrated logging system from `log`/`env_logger` to `tracing`.
+- **Core:** Migrated logging system from `log`/`env_logger` to `tracing`.
+- **Core:** Implemented pre-process upscaling of input image for Tesseract which
+  vastly improves recognition of smaller font sizes.
 
 ### Deprecated
 
 ### Removed
 
-- **Internal:** The statically linked default font. This effectively reduces the
+- **Core:** The statically linked default font. This effectively reduces the
   size of the binary/executable by ~30MiB.
 
 ### Fixed
 
-- **Internal:** A duplicate check for whether Tesseract is installed.
-- **Internal:** A rare case where Tesseract would not parse horizontal text when
+- **Core:** A duplicate check for whether Tesseract is installed.
+- **Core:** A rare case where Tesseract would not parse horizontal text when
   vertical confidence is NaN.
 
 ### Security

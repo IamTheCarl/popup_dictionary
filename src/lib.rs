@@ -278,7 +278,6 @@ pub fn ocr(
             }
         };
 
-        /*
         // scale image so the smaller dimension (w/h) is at least 100px, don't scale more than 4x
         // (somewhat arbitrary number) as that reduces accuracy again
         let (width, height) = image.dimensions();
@@ -288,7 +287,6 @@ pub fn ocr(
             height * scaling,
             image::imageops::FilterType::Nearest,
         );
-        */
 
         let mut image_data = Vec::new();
         image.write_to(
