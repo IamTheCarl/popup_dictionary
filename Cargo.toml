@@ -31,6 +31,9 @@ xz2 = { version = "0.1.7", features = ["static"] }
 tar = "0.4.44"
 zstd = "0.13.3"
 flate2 = "1.1.9"
+# manga-ocr
+ort = "2.0.0-rc.12"
+ndarray = "0.17.2"
 # util
 dirs = "6.0.0"                                           # platform agnostic default dirs
 clap = { version = "4.5.53", features = ["derive"] }     # cli

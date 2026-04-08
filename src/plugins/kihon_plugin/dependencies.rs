@@ -11,6 +11,12 @@ const JUMANDIC_URL: &str =
 const JMDICT_SIMPLIFIED_URL: &str = "https://github.com/scriptin/jmdict-simplified/releases/download/3.6.2%2B20260202123847/jmdict-eng-3.6.2+20260202123847.json.tgz";
 const LEEDS_FREQUENCIES_URL: &str = "https://github.com/hingston/japanese/blob/78a5f64e872e4a2ad430adfd124c98f5f0a1619b/44492-japanese-words-latin-lines-removed.txt";
 const JMDICT_FURIGANA_URL: &str = "https://github.com/Doublevil/JmdictFurigana/releases/download/2.3.1%2B2026-01-25/JmdictFurigana.json";
+const MANGA_OCR_ENCODER_URL: &str =
+    "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/encoder_model.onnx";
+const MANGA_OCR_DECODER_URL: &str =
+    "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/decoder_model.onnx";
+const MANGA_OCR_VOCAB_URL: &str =
+    "https://huggingface.co/mayocream/manga-ocr-onnx/resolve/main/vocab.txt";
 
 pub fn fetch_jumandic(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let response = reqwest::blocking::get(JUMANDIC_URL)?;
@@ -65,27 +71,31 @@ pub fn fetch_jmdict_simplified(destination_path: &PathBuf) -> Result<(), Box<dyn
 }
 
 pub fn fetch_leeds_frequencies(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut response = reqwest::blocking::get(LEEDS_FREQUENCIES_URL)?;
-
-    if let Some(parent) = destination_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut out_file = File::create(destination_path)?;
-
-    io::copy(&mut response, &mut out_file)?;
+    fetch_file(destination_path, LEEDS_FREQUENCIES_URL)?;
 
     Ok(())
 }
 
 pub fn fetch_jmdict_furigana(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut response = reqwest::blocking::get(JMDICT_FURIGANA_URL)?;
+    fetch_file(destination_path, JMDICT_FURIGANA_URL)?;
 
-    if let Some(parent) = destination_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut out_file = File::create(destination_path)?;
+    Ok(())
+}
 
-    io::copy(&mut response, &mut out_file)?;
+pub fn fetch_manga_ocr_encoder(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    fetch_file(destination_path, MANGA_OCR_ENCODER_URL)?;
+
+    Ok(())
+}
+
+pub fn fetch_manga_ocr_decoder(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    fetch_file(destination_path, MANGA_OCR_DECODER_URL)?;
+
+    Ok(())
+}
+
+pub fn fetch_manga_ocr_vocab(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    fetch_file(destination_path, MANGA_OCR_VOCAB_URL)?;
 
     Ok(())
 }
@@ -115,4 +125,17 @@ fn try_remove_file(path: PathBuf) {
     } else {
         tracing::info!("Cleaned up {}.", path.display());
     }
+}
+
+fn fetch_file(destination_path: &PathBuf, url: &str) -> Result<(), Box<dyn Error>> {
+    let mut response = reqwest::blocking::get(url)?;
+
+    if let Some(parent) = destination_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut out_file = File::create(destination_path)?;
+
+    io::copy(&mut response, &mut out_file)?;
+
+    Ok(())
 }

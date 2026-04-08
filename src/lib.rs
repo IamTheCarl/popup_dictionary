@@ -3,6 +3,7 @@ use arboard::GetExtLinux;
 
 use arboard::Clipboard;
 use image::DynamicImage;
+use image::GenericImageView;
 use image::ImageBuffer;
 use image::ImageReader;
 use image::Rgba;
@@ -13,13 +14,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use crate::app::run_app;
+use crate::manga_ocr::MangaOcr;
 use crate::tesseract::{check_tesseract, ocr_image};
 
 pub mod app;
 mod font_helper;
+mod manga_ocr;
 mod plugin;
 mod plugins;
 mod tesseract;
@@ -123,11 +127,17 @@ struct ClipboardContent {
     text: Option<String>,
 }
 
-pub fn watch(config: app::Config, paused: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+pub fn watch(
+    config: app::Config,
+    paused: Arc<AtomicBool>,
+    ocr_model: Arc<AtomicUsize>,
+) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run watch mode.");
 
     let mut clipboard: Clipboard = Clipboard::new()?;
     let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
+
+    let mut manga_ocr: Option<MangaOcr> = None;
 
     tracing::info!("Watching...");
     let mut was_paused = false;
@@ -158,7 +168,12 @@ pub fn watch(config: app::Config, paused: Arc<AtomicBool>) -> Result<(), Box<dyn
                     Ok(data) => match data.decode() {
                         Ok(dynamic_image) => {
                             success = true;
-                            if let Err(e) = ocr(dynamic_image, config.clone()) {
+                            if let Err(e) = ocr(
+                                dynamic_image,
+                                config.clone(),
+                                ocr_model.load(Ordering::Relaxed),
+                                &mut manga_ocr,
+                            ) {
                                 tracing::warn!(
                                     "Failed while running OCR mode in watch mode due to error: {e}"
                                 );
@@ -183,7 +198,12 @@ pub fn watch(config: app::Config, paused: Arc<AtomicBool>) -> Result<(), Box<dyn
                         image_data.bytes.into_owned(),
                     ) {
                         let dynamic_image = DynamicImage::ImageRgba8(buffer);
-                        if let Err(e) = ocr(dynamic_image, config.clone()) {
+                        if let Err(e) = ocr(
+                            dynamic_image,
+                            config.clone(),
+                            ocr_model.load(Ordering::Relaxed),
+                            &mut manga_ocr,
+                        ) {
                             tracing::warn!(
                                 "Failed while running OCR mode in watch mode due to error: {e}"
                             );
@@ -241,23 +261,54 @@ fn clipboard_content_differs(first: &ClipboardContent, second: &ClipboardContent
     }
 }
 
-pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error>> {
+pub fn ocr(
+    image: DynamicImage,
+    config: app::Config,
+    ocr_model: usize,
+    manga_ocr: &mut Option<MangaOcr>,
+) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run OCR mode.");
 
-    let tess_command: String = match check_tesseract() {
-        Ok(command) => command,
-        Err(e) => {
-            return Err(Box::from(format!("Could not find Tesseract: {e}")));
+    let sentence = if ocr_model == 0 {
+        // Tesseract
+        let tess_command: String = match check_tesseract() {
+            Ok(command) => command,
+            Err(e) => {
+                return Err(Box::from(format!("Could not find Tesseract: {e}")));
+            }
+        };
+
+        /*
+        // scale image so the smaller dimension (w/h) is at least 100px, don't scale more than 4x
+        // (somewhat arbitrary number) as that reduces accuracy again
+        let (width, height) = image.dimensions();
+        let scaling = (((100.0 / (width.min(height) as f32)) as u32) + 1).min(4);
+        let image = image.resize(
+            width * scaling,
+            height * scaling,
+            image::imageops::FilterType::Nearest,
+        );
+        */
+
+        let mut image_data = Vec::new();
+        image.write_to(
+            &mut std::io::Cursor::new(&mut image_data),
+            image::ImageFormat::Png,
+        )?;
+
+        ocr_image(&tess_command, &image_data)?
+    } else if ocr_model == 1 {
+        // MangaOCR
+        if manga_ocr.is_none() {
+            *manga_ocr = Some(crate::manga_ocr::MangaOcr::new()?);
         }
+        manga_ocr
+            .as_mut()
+            .expect("MangaOCR model could not be created.")
+            .ocr_image(&image)?
+    } else {
+        String::new()
     };
-
-    let mut image_data = Vec::new();
-    image.write_to(
-        &mut std::io::Cursor::new(&mut image_data),
-        image::ImageFormat::Png,
-    )?;
-
-    let sentence = ocr_image(&tess_command, &image_data)?;
 
     run(&sentence, config)
 

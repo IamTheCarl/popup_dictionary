@@ -1,6 +1,9 @@
-use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 
-pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
+pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
     tracing::info!("Spawning tray icon.");
 
     #[cfg(target_os = "linux")]
@@ -13,7 +16,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
                 .unwrap();
 
             rt.block_on(async {
-                let tray = MyTray { paused };
+                let tray = MyTray { paused, ocr_model };
                 let _handle = tray.spawn().await.unwrap();
 
                 std::future::pending::<()>().await;
@@ -22,7 +25,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
     }
     #[cfg(target_os = "windows")]
     {
-        std::thread::spawn(move || {
+        std::thread::spawn(|| {
             use tray_icon::{
                 Icon, TrayIconBuilder,
                 menu::{Menu, MenuEvent, MenuItem},
@@ -39,8 +42,18 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
             let icon = Icon::from_rgba(image.into_raw(), width, height).unwrap();
 
             let tray_menu = Menu::new();
+            let active_ocr_model = self.ocr_model.load(Ordering::Relaxed);
+            let ocr_label = if active_ocr_model == 0 {
+                "Switch to MangaOCR"
+            } else if active_ocr_model == 1 {
+                "Switch to Tesseract"
+            } else {
+                ""
+            };
+            let ocr_item = MenuItem::new(ocr_label, true, None);
             let pause_item = MenuItem::new("Pause", true, None);
             let quit_item = MenuItem::new("Exit", true, None);
+            tray_menu.append(&ocr_item).unwrap();
             tray_menu.append(&pause_item).unwrap();
             tray_menu.append(&quit_item).unwrap();
 
@@ -66,6 +79,13 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
                                 tracing::info!("Pausing watcher.");
                                 pause_item.set_text("Resume");
                             }
+                        } else if event.id == ocr_item.id() {
+                            let previous_model = ocr_model.fetch_xor(1, Ordering::Relaxed);
+                            if previous_model == 0 {
+                                ocr_item.set_text("Switch to Tesseract");
+                            } else if previous_model == 1 {
+                                ocr_item.set_text("Switch to MangaOCR");
+                            }
                         }
                     }
 
@@ -81,6 +101,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>) {
 #[cfg(target_os = "linux")]
 struct MyTray {
     paused: Arc<AtomicBool>,
+    ocr_model: Arc<AtomicUsize>,
 }
 
 #[cfg(target_os = "linux")]
@@ -111,9 +132,25 @@ impl ksni::Tray for MyTray {
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
+        let active_ocr_model = self.ocr_model.load(Ordering::Relaxed);
+        let ocr_label = if active_ocr_model == 0 {
+            "Switch to MangaOCR"
+        } else if active_ocr_model == 1 {
+            "Switch to Tesseract"
+        } else {
+            ""
+        };
         let is_paused = self.paused.load(Ordering::Relaxed);
         let pause_label = if is_paused { "Resume" } else { "Pause" };
         vec![
+            StandardItem {
+                label: ocr_label.into(),
+                activate: Box::new(|this: &mut Self| {
+                    this.ocr_model.fetch_xor(1, Ordering::Relaxed);
+                }),
+                ..Default::default()
+            }
+            .into(),
             StandardItem {
                 label: pause_label.into(),
                 activate: Box::new(|this: &mut Self| {

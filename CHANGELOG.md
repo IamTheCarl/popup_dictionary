@@ -22,6 +22,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **UI:** A pause/resume button to the tray menu to pause detection in watch mode.
 - **UI:** Helpful tooltips when hovering over buttons.
 - **Kihon:** A copy button to each definition term.
+- **Core:** MangaOCR as a new OCR engine.
+- **UI:** A tray menu button which allows switching between Tesseract and MangaOCR.
 
 ### Changed
 
