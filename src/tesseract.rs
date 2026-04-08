@@ -98,7 +98,7 @@ pub fn ocr_image(tess_command: &str, image_data: &[u8]) -> Result<String, Box<dy
                 hor_conf,
                 ver_conf
             );
-            if hor_conf >= ver_conf {
+            if hor_conf >= ver_conf || ver_conf.is_nan() {
                 #[cfg(target_os = "linux")]
                 let hor_command = Command::new(&tess_command)
                     .arg("stdin")

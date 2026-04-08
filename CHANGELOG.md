@@ -39,6 +39,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 ### Fixed
 
 - **Internal:** A duplicate check for whether Tesseract is installed.
+- **Internal:** A rare case where Tesseract would not parse horizontal text when
+  vertical confidence is NaN.
 
 ### Security
 
