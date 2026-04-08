@@ -47,6 +47,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** A duplicate check for whether Tesseract is installed.
 - **Core:** A rare case where Tesseract would not parse horizontal text when
   vertical confidence is NaN.
+- **Core:** The bug where scrolling horizontally and then clicking on a token in
+  the input text would make the scroll-bar jump.
 
 ### Security
 

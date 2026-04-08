@@ -337,6 +337,7 @@ impl MyApp {
         tokens: &Vec<Token>,
         selected_token_idx: usize,
     ) -> Option<usize> {
+        let mut clicked_index = None;
         for (idx, token) in tokens.iter().enumerate() {
             let mut label_text: RichText = RichText::new(&token.input_word).size(PRIMARY_TEXT_SIZE);
             if token.is_valid() {
@@ -377,13 +378,13 @@ impl MyApp {
                     );
                 }
                 if response.clicked() {
-                    return Some(idx);
+                    clicked_index = Some(idx);
                 }
             } else {
                 ui.label(label_text);
             }
         }
-        return None;
+        return clicked_index;
     }
 }
 
