@@ -6,7 +6,10 @@ use eframe::{
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use std::sync::{Arc, Mutex};
+use std::{
+    f32::INFINITY,
+    sync::{Arc, Mutex},
+};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -148,6 +151,8 @@ pub struct MyApp {
     active_plugin_index: usize,
     theme_is_set: bool,
     main_frame: Option<egui::containers::Frame>,
+    edit_mode: bool,
+    was_edited: bool,
 }
 
 impl MyApp {
@@ -183,9 +188,11 @@ impl MyApp {
             active_plugin_index: init_plugin_idx,
             theme_is_set: false,
             main_frame: None,
+            edit_mode: false,
+            was_edited: false,
         };
 
-        app.try_load_plugin(init_plugin_idx);
+        app.try_load_plugin(init_plugin_idx, false);
 
         tracing::info!("Opening the window.");
         app
@@ -212,7 +219,7 @@ impl MyApp {
         ));
     }*/
 
-    fn try_load_plugin(&mut self, plugin_index: usize) {
+    fn try_load_plugin(&mut self, plugin_index: usize, force: bool) {
         tracing::info!(
             "Trying to load plugin: {}",
             self.available_plugins.get(plugin_index).map_or(
@@ -234,7 +241,7 @@ impl MyApp {
                     return;
                 }
                 PluginState::Ready(_) => {
-                    if self.active_plugin_index == plugin_index {
+                    if self.active_plugin_index == plugin_index && !force {
                         tracing::info!("The same plugin is already loaded.");
                         return;
                     }
@@ -422,6 +429,7 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| {
                 let footer_height = 42.0;
 
+                let curr_sentence: String = String::from(&self.sentence);
                 match &(*self.plugin_state.lock().unwrap()) {
                     PluginState::Ready(plugin) => {
                         let tokens: &Vec<Token> = plugin.get_tokens();
@@ -440,33 +448,123 @@ impl eframe::App for MyApp {
                         }
                         let selected_token_idx: usize = self.selected_token_index.unwrap();
 
-                        egui::ScrollArea::horizontal()
-                            .id_salt("token_header")
-                            .show(ui, |ui| {
-                                if self.config.wrapped {
-                                    ui.horizontal_wrapped(|ui| {
-                                        if let Some(idx) = Self::display_token_header(
-                                            ui,
-                                            tokens,
-                                            selected_token_idx,
-                                        ) {
-                                            self.selected_token_index = Some(idx);
-                                        }
-                                    });
-                                } else {
-                                    ui.horizontal(|ui| {
-                                        if let Some(idx) = Self::display_token_header(
-                                            ui,
-                                            tokens,
-                                            selected_token_idx,
-                                        ) {
-                                            self.selected_token_index = Some(idx);
-                                        }
-                                    });
-                                }
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        egui::ScrollArea::horizontal()
+                                            .id_salt("token_header")
+                                            .min_scrolled_height(32.0)
+                                            .show(ui, |ui| {
+                                                ui.vertical(|ui| {
+                                                    if self.config.wrapped {
+                                                        if self.edit_mode {
+                                                            let res = ui.add(
+                                                                egui::TextEdit::multiline(
+                                                                    &mut self.sentence,
+                                                                )
+                                                                .desired_width(f32::INFINITY)
+                                                                .font(egui::FontId::monospace(
+                                                                    PRIMARY_TEXT_SIZE,
+                                                                ))
+                                                                .desired_rows(1),
+                                                            );
+                                                            if res.lost_focus() {
+                                                                self.edit_mode = false;
+                                                            }
+                                                            if !ui
+                                                                .memory(|mem| mem.has_focus(res.id))
+                                                            {
+                                                                res.request_focus();
+                                                            }
+                                                        } else {
+                                                            ui.horizontal_wrapped(|ui| {
+                                                                if let Some(idx) =
+                                                                    Self::display_token_header(
+                                                                        ui,
+                                                                        tokens,
+                                                                        selected_token_idx,
+                                                                    )
+                                                                {
+                                                                    self.selected_token_index =
+                                                                        Some(idx);
+                                                                }
+                                                            });
+                                                        }
+                                                    } else {
+                                                        if self.edit_mode {
+                                                            let res = ui.add(
+                                                                egui::TextEdit::singleline(
+                                                                    &mut self.sentence,
+                                                                )
+                                                                .desired_width(f32::INFINITY)
+                                                                .font(egui::FontId::monospace(
+                                                                    PRIMARY_TEXT_SIZE,
+                                                                ))
+                                                                .desired_rows(1),
+                                                            );
+                                                            if res.lost_focus() {
+                                                                self.edit_mode = false;
+                                                            }
+                                                            if !ui
+                                                                .memory(|mem| mem.has_focus(res.id))
+                                                            {
+                                                                res.request_focus();
+                                                            }
+                                                        } else {
+                                                            ui.horizontal(|ui| {
+                                                                if let Some(idx) =
+                                                                    Self::display_token_header(
+                                                                        ui,
+                                                                        tokens,
+                                                                        selected_token_idx,
+                                                                    )
+                                                                {
+                                                                    self.selected_token_index =
+                                                                        Some(idx);
+                                                                }
+                                                            });
+                                                        }
+                                                    }
 
-                                ui.add_space(SPACING_SIZE);
+                                                    ui.add_space(SPACING_SIZE);
+                                                });
+                                            });
+                                    },
+                                );
                             });
+
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("\u{1F504}").size(TINY_TEXT_SIZE),
+                                            ))
+                                            .on_hover_text(
+                                                RichText::new("Reverse text").size(TINY_TEXT_SIZE),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.sentence = self.sentence.chars().rev().collect();
+                                        }
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("\u{270F}").size(TINY_TEXT_SIZE),
+                                            ))
+                                            .on_hover_text(
+                                                RichText::new("Edit text").size(TINY_TEXT_SIZE),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.edit_mode = true;
+                                        }
+                                    },
+                                );
+                            });
+                        });
 
                         ui.separator();
 
@@ -563,7 +661,7 @@ impl eframe::App for MyApp {
                                     }
                                     if let Some(idx) = clicked_idx {
                                         if self.active_plugin_index != idx {
-                                            self.try_load_plugin(idx);
+                                            self.try_load_plugin(idx, false);
                                         }
                                     }
                                 });
@@ -615,6 +713,14 @@ impl eframe::App for MyApp {
                         });
                     },
                 );
+
+                if curr_sentence != self.sentence {
+                    self.was_edited = true;
+                }
+                if self.was_edited && !self.edit_mode {
+                    self.was_edited = false;
+                    self.try_load_plugin(self.active_plugin_index, true);
+                }
             });
     }
 }
