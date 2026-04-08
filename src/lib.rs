@@ -1,7 +1,9 @@
-use arboard::Clipboard;
 #[cfg(target_os = "linux")]
 use arboard::GetExtLinux;
+
+use arboard::Clipboard;
 use image::DynamicImage;
+use image::GenericImageView;
 use image::ImageBuffer;
 use image::ImageReader;
 use image::Rgba;
@@ -9,12 +11,19 @@ use regex::Regex;
 use std::error::Error;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 use crate::app::run_app;
+use crate::manga_ocr::MangaOcr;
 use crate::tesseract::{check_tesseract, ocr_image};
 
 pub mod app;
+mod font_helper;
+mod manga_ocr;
 mod plugin;
 mod plugins;
 mod tesseract;
@@ -31,6 +40,7 @@ pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
         return Err(Box::from("Input text must contain japanese text."));
     }
 
+    tracing::info!("Input looks good. Launching dictionary app.");
     run_app(&sentence, config)?;
 
     Ok(())
@@ -55,27 +65,39 @@ fn contains_japanese(text: &str) -> bool {
 
 #[cfg(target_os = "linux")]
 pub fn primary(config: app::Config) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run primary mode.");
+
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Primary)
         .text()?;
+
+    tracing::debug!("Text received from primary selection.");
     run(&sentence, config)
 }
 
 #[cfg(target_os = "linux")]
 pub fn secondary(config: app::Config) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run secondary mode.");
+
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard
         .get()
         .clipboard(arboard::LinuxClipboardKind::Secondary)
         .text()?;
+
+    tracing::debug!("Text received from secondary selection.");
     run(&sentence, config)
 }
 
 pub fn clipboard(config: app::Config) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run clipboard mode.");
+
     let mut clipboard: Clipboard = Clipboard::new()?;
     let sentence: String = clipboard.get().text()?;
+
+    tracing::debug!("Text received from main clipboard.");
     run(&sentence, config)
 }
 
@@ -105,35 +127,70 @@ struct ClipboardContent {
     text: Option<String>,
 }
 
-pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
+pub fn watch(
+    config: app::Config,
+    paused: Arc<AtomicBool>,
+    ocr_model: Arc<AtomicUsize>,
+) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run watch mode.");
+
     let mut clipboard: Clipboard = Clipboard::new()?;
     let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
+
+    let mut manga_ocr: Option<MangaOcr> = None;
+
+    tracing::info!("Watching...");
+    let mut was_paused = false;
     loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
+
+        if paused.load(Ordering::Relaxed) {
+            was_paused = true;
+            continue;
+        }
+        if was_paused {
+            // Replace initial_content with current here to prevent acting on clipboard content
+            // that was copied while paused.
+            initial_content = get_clipboard_content(&mut clipboard);
+            was_paused = false;
+        }
+
         let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
         if clipboard_content_differs(&initial_content, &current_content) {
-            println!("new clipboard content");
+            tracing::info!("New clipboard content detected.");
+
             if let Some(image) = current_content.image {
+                tracing::debug!("Found image data in main clipboard.");
+
                 let image_data = image.clone();
                 let mut success: bool = false;
                 match ImageReader::new(Cursor::new(image_data.bytes)).with_guessed_format() {
                     Ok(data) => match data.decode() {
                         Ok(dynamic_image) => {
                             success = true;
-                            if let Err(e) = ocr(dynamic_image, config.clone()) {
-                                eprintln!("Error: {e}");
+                            if let Err(e) = ocr(
+                                dynamic_image,
+                                config.clone(),
+                                ocr_model.load(Ordering::Relaxed),
+                                &mut manga_ocr,
+                            ) {
+                                tracing::warn!(
+                                    "Failed while running OCR mode in watch mode due to error: {e}"
+                                );
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error: {e}");
+                            tracing::warn!("Could not decode image data due to error: {e}");
                         }
                     },
                     Err(e) => {
-                        eprintln!("Error: {e}");
+                        tracing::warn!("Could not read image data due to error: {e}");
                     }
                 };
 
                 if !success {
+                    tracing::debug!("Trying to parse image data as raw pixel buffer instead.");
+
                     let image_data = image.clone();
                     if let Some(buffer) = ImageBuffer::<Rgba<u8>, _>::from_raw(
                         image_data.width as u32,
@@ -141,18 +198,31 @@ pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
                         image_data.bytes.into_owned(),
                     ) {
                         let dynamic_image = DynamicImage::ImageRgba8(buffer);
-                        if let Err(e) = ocr(dynamic_image, config.clone()) {
-                            eprintln!("Error: {e}");
+                        if let Err(e) = ocr(
+                            dynamic_image,
+                            config.clone(),
+                            ocr_model.load(Ordering::Relaxed),
+                            &mut manga_ocr,
+                        ) {
+                            tracing::warn!(
+                                "Failed while running OCR mode in watch mode due to error: {e}"
+                            );
                         }
                     } else {
-                        eprintln!("Error: Failed to create image buffer from raw pixels");
+                        tracing::debug!(
+                            "Image buffer not big enough for from_raw. This is weird..."
+                        );
                     }
                 }
             } else if let Some(sentence) = current_content.text {
+                tracing::debug!("Found text in main clipboard.");
                 if let Err(e) = run(&sentence, config.clone()) {
-                    eprintln!("Error: {e}");
+                    tracing::warn!(
+                        "Failed while running text mode in watch mode due to error: {e}"
+                    );
                 }
             }
+
             // Getting clipboard content again here instead of replacing with current_content
             // makes sure that clipboard changes while app was running aren't acted on
             initial_content = get_clipboard_content(&mut clipboard);
@@ -191,22 +261,52 @@ fn clipboard_content_differs(first: &ClipboardContent, second: &ClipboardContent
     }
 }
 
-pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error>> {
-    if let Err(e) = check_tesseract() {
-        eprintln!(
-            "Error: Tesseract could not be found. Make sure you have Tesseract installed if you want to use ocr."
+pub fn ocr(
+    image: DynamicImage,
+    config: app::Config,
+    ocr_model: usize,
+    manga_ocr: &mut Option<MangaOcr>,
+) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run OCR mode.");
+
+    let sentence = if ocr_model == 0 {
+        // Tesseract
+        let tess_command: String = match check_tesseract() {
+            Ok(command) => command,
+            Err(e) => {
+                return Err(Box::from(format!("Could not find Tesseract: {e}")));
+            }
+        };
+
+        // scale image so the smaller dimension (w/h) is at least 100px, don't scale more than 4x
+        // (somewhat arbitrary number) as that reduces accuracy again
+        let (width, height) = image.dimensions();
+        let scaling = (((100.0 / (width.min(height) as f32)) as u32) + 1).min(4);
+        let image = image.resize(
+            width * scaling,
+            height * scaling,
+            image::imageops::FilterType::Nearest,
         );
-        eprint!("Tesseract Error: ");
-        return Err(Box::from(e));
-    }
 
-    let mut image_data = Vec::new();
-    image.write_to(
-        &mut std::io::Cursor::new(&mut image_data),
-        image::ImageFormat::Png,
-    )?;
+        let mut image_data = Vec::new();
+        image.write_to(
+            &mut std::io::Cursor::new(&mut image_data),
+            image::ImageFormat::Png,
+        )?;
 
-    let sentence = ocr_image(&image_data)?;
+        ocr_image(&tess_command, &image_data)?
+    } else if ocr_model == 1 {
+        // MangaOCR
+        if manga_ocr.is_none() {
+            *manga_ocr = Some(crate::manga_ocr::MangaOcr::new()?);
+        }
+        manga_ocr
+            .as_mut()
+            .expect("MangaOCR model could not be created.")
+            .ocr_image(&image)?
+    } else {
+        String::new()
+    };
 
     run(&sentence, config)
 
@@ -249,6 +349,7 @@ pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error
     run(&sentence, initial_plugin)*/
 }
 
+/*
 // from tesseract-rs docs
 fn get_tessdata_dir() -> PathBuf {
     match std::env::var("TESSDATA_PREFIX") {
@@ -290,3 +391,4 @@ fn get_default_tessdata_dir() -> PathBuf {
         panic!("Unsupported operating system");
     }
 }
+*/

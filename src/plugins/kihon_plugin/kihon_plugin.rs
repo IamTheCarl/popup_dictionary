@@ -1,6 +1,7 @@
 use egui::Color32;
 use egui::RichText;
 use egui::Ui;
+use std::error::Error;
 use std::path::PathBuf;
 
 use crate::app;
@@ -23,17 +24,31 @@ pub struct KihonPlugin {
 
 impl Plugin for KihonPlugin {
     fn load_plugin(sentence: &str) -> Self {
-        println!("loading jmdict");
-        let db_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path.join("popup_dictionary").join("db"),
-            None => Err("No valid data path found in environment variables.").unwrap(),
-        };
-        let dictionary: Dictionary = Dictionary::load_dictionary(&db_path).unwrap();
+        let result: Result<Self, Box<dyn Error>> = (|| {
+            let db_path: PathBuf = match dirs::data_dir() {
+                Some(path) => path.join("popup_dictionary").join("db"),
+                None => {
+                    return Err(Box::from(
+                        "No valid data path found in environment variables.",
+                    ));
+                }
+            };
 
-        println!("tokenizing with jumandic");
-        let tokens: Vec<Token> = tokenize(&sentence.to_string(), &dictionary).unwrap();
+            let dictionary = Dictionary::load_dictionary(&db_path)?;
 
-        Self { tokens, dictionary }
+            let tokens = tokenize(&sentence.to_string(), &dictionary)?;
+
+            Ok(Self { tokens, dictionary })
+        })();
+
+        match result {
+            Ok(plugin) => plugin,
+            Err(e) => {
+                // TODO: Add proper error handling.
+                tracing::error!("Failed to tokenize input text with Kihon due to error: {e}");
+                panic!("{e}");
+            }
+        }
     }
 
     fn get_tokens(&self) -> &Vec<Token> {
@@ -136,6 +151,11 @@ impl Plugin for KihonPlugin {
     }
 
     fn open(&self, ctx: &egui::Context) {
+        tracing::info!(
+            "Trying to open attributions for the Kihon plugin. If this does not work, go to: {}.",
+            ATTRIBUTIONS_URL
+        );
+
         ctx.open_url(egui::output::OpenUrl {
             url: String::from(ATTRIBUTIONS_URL),
             new_tab: true,
@@ -200,19 +220,51 @@ impl KihonPlugin {
 
     fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
         for dictionary_term in terms {
-            if !dictionary_term.term.is_empty() {
-                if let Some(furigana_vec) = &dictionary_term.furigana {
-                    Self::display_furigana(ui, furigana_vec);
+            ui.horizontal(|ui| {
+                if !dictionary_term.term.is_empty() {
+                    if let Some(furigana_vec) = &dictionary_term.furigana {
+                        Self::display_furigana(ui, furigana_vec);
+                    } else {
+                        let furigana: Vec<Furigana> = vec![Furigana {
+                            ruby: dictionary_term.term.to_string(),
+                            rt: Some(dictionary_term.reading.to_string()),
+                        }];
+                        Self::display_furigana(ui, &furigana);
+                    }
                 } else {
-                    let furigana: Vec<Furigana> = vec![Furigana {
-                        ruby: dictionary_term.term.to_string(),
-                        rt: Some(dictionary_term.reading.to_string()),
-                    }];
-                    Self::display_furigana(ui, &furigana);
+                    ui.label(RichText::new(&dictionary_term.reading).heading());
                 }
-            } else {
-                ui.label(RichText::new(&dictionary_term.reading).heading());
-            }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(app::SPACING_SIZE);
+
+                    if ui
+                        .add(egui::Button::new(
+                            RichText::new("\u{1f4cb}").size(app::TINY_TEXT_SIZE),
+                        ))
+                        .on_hover_text(
+                            RichText::new("Copy term to clipboard").size(app::TINY_TEXT_SIZE),
+                        )
+                        .clicked()
+                    {
+                        // Copy button
+                        let term: String = if !dictionary_term.term.is_empty() {
+                            dictionary_term.term.to_owned()
+                        } else {
+                            dictionary_term.reading.to_owned()
+                        };
+                        std::thread::spawn(|| {
+                            tracing::debug!("Trying to copy term to clipboard.");
+                            let mut clipboard: arboard::Clipboard =
+                                arboard::Clipboard::new().unwrap();
+                            clipboard.set_text(term).unwrap();
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                            tracing::debug!("Successfully copied term to clipboard.");
+                        });
+                    }
+                });
+            });
 
             let mut count: u32 = 0;
             let mut last_tags: String = String::new();
@@ -299,7 +351,7 @@ impl KihonPlugin {
         let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
         let response = ui
             .allocate_rect(rect, egui::Sense::hover())
-            .on_hover_text(Dictionary::get_tag(tag));
+            .on_hover_text(RichText::new(Dictionary::get_tag(tag)).size(app::TINY_TEXT_SIZE));
 
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Help);

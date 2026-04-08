@@ -1,10 +1,15 @@
+#[cfg(feature = "hyprland-support")]
+use hyprland::ctl::plugin;
+
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use log::{error, warn};
-use std::sync::{Arc, Mutex};
+use std::{
+    f32::INFINITY,
+    sync::{Arc, Mutex},
+};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -32,15 +37,20 @@ pub struct Config {
     pub initial_width: u16,
     pub initial_height: u16,
     pub show_tray_icon: bool,
+    pub font: String,
 }
 
 pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+    #[cfg(feature = "hyprland-support")]
+    tracing::debug!("Looks like Hyprland? {}.", is_hyprland);
 
     let mut init_pos: Option<Pos2> = None;
     let options: NativeOptions;
     if config.open_at_cursor {
+        tracing::info!("Trying to open window at cursor position.");
+
         match crate::window_helper::get_optimal_init_pos(
             #[cfg(feature = "hyprland-support")]
             is_hyprland,
@@ -49,6 +59,12 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
         ) {
             Ok(optimal_pos) => {
                 init_pos = Some(optimal_pos);
+
+                tracing::debug!(
+                    "Found optimal window position at x: {}, y: {}.",
+                    optimal_pos.x,
+                    optimal_pos.y
+                );
 
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
@@ -64,7 +80,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 };
             }
             Err(e) => {
-                warn!("Failed to get optimal init pos with error: {:?}", e);
+                tracing::warn!("Could not get optimal window position due to error: {e}");
+
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
                         .with_inner_size([
@@ -89,6 +106,17 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
         };
     }
 
+    tracing::debug!(
+        "Window config is width: {}, height: {}, name: {}, plugin: {}, wrapped: {}.",
+        config.initial_width,
+        config.initial_height,
+        APP_NAME,
+        config
+            .initial_plugin
+            .to_owned()
+            .unwrap_or(String::from("None")),
+        config.wrapped
+    );
     eframe::run_native(
         APP_NAME,
         options,
@@ -123,6 +151,8 @@ pub struct MyApp {
     active_plugin_index: usize,
     theme_is_set: bool,
     main_frame: Option<egui::containers::Frame>,
+    edit_mode: bool,
+    was_edited: bool,
 }
 
 impl MyApp {
@@ -133,10 +163,10 @@ impl MyApp {
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
-        Self::load_main_font(&cc.egui_ctx);
+        crate::font_helper::load_main_font(&cc.egui_ctx, &config.font);
 
         let available_plugins: Vec<Plugins> = Plugins::all();
-        println!("plugin: {:?}", config.initial_plugin);
+
         let init_plugin_idx: usize = if let Some(init_plugin) = &config.initial_plugin {
             available_plugins
                 .iter()
@@ -145,7 +175,6 @@ impl MyApp {
         } else {
             0
         };
-        println!("plugin: {}", init_plugin_idx);
 
         let mut app = Self {
             config,
@@ -159,13 +188,17 @@ impl MyApp {
             active_plugin_index: init_plugin_idx,
             theme_is_set: false,
             main_frame: None,
+            edit_mode: false,
+            was_edited: false,
         };
 
-        app.try_load_plugin(init_plugin_idx);
+        app.try_load_plugin(init_plugin_idx, false);
 
+        tracing::info!("Opening the window.");
         app
     }
 
+    /*
     fn load_main_font(ctx: &Context) {
         ctx.add_font(FontInsert::new(
             "NotoSansCJKJP",
@@ -184,9 +217,17 @@ impl MyApp {
                 },
             ],
         ));
-    }
+    }*/
 
-    fn try_load_plugin(&mut self, plugin_index: usize) {
+    fn try_load_plugin(&mut self, plugin_index: usize, force: bool) {
+        tracing::info!(
+            "Trying to load plugin: {}",
+            self.available_plugins.get(plugin_index).map_or(
+                format!("{}?", plugin_index),
+                |plugin| format!("{}.", plugin.name())
+            )
+        );
+
         if plugin_index >= self.available_plugins.len() {
             return;
         }
@@ -196,10 +237,12 @@ impl MyApp {
             let mut state = state_clone.lock().unwrap();
             match *state {
                 PluginState::Loading => {
+                    tracing::info!("A plugin is currently loading.");
                     return;
                 }
                 PluginState::Ready(_) => {
-                    if self.active_plugin_index == plugin_index {
+                    if self.active_plugin_index == plugin_index && !force {
+                        tracing::info!("The same plugin is already loaded.");
                         return;
                     }
                     *state = PluginState::Loading;
@@ -294,6 +337,7 @@ impl MyApp {
         tokens: &Vec<Token>,
         selected_token_idx: usize,
     ) -> Option<usize> {
+        let mut clicked_index = None;
         for (idx, token) in tokens.iter().enumerate() {
             let mut label_text: RichText = RichText::new(&token.input_word).size(PRIMARY_TEXT_SIZE);
             if token.is_valid() {
@@ -334,13 +378,13 @@ impl MyApp {
                     );
                 }
                 if response.clicked() {
-                    return Some(idx);
+                    clicked_index = Some(idx);
                 }
             } else {
                 ui.label(label_text);
             }
         }
-        return None;
+        return clicked_index;
     }
 }
 
@@ -352,7 +396,9 @@ impl eframe::App for MyApp {
                 if let Err(e) =
                     crate::window_helper::move_window_hyprland(init_pos.x as i16, init_pos.y as i16)
                 {
-                    error!("{}", e);
+                    tracing::warn!(
+                        "Could not set initial window position on hyprland due to error: {e}"
+                    );
                 } else {
                     self.init_pos = None;
                 }
@@ -362,7 +408,9 @@ impl eframe::App for MyApp {
             if let Err(e) =
                 crate::window_helper::move_window_x11(init_pos.x as i32, init_pos.y as i32)
             {
-                error!("{}", e);
+                tracing::warn!("Could not set initial window position on x11 due to error: {e}");
+            } else {
+                self.init_pos = None;
             }
         }
 
@@ -382,6 +430,7 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| {
                 let footer_height = 42.0;
 
+                let curr_sentence: String = String::from(&self.sentence);
                 match &(*self.plugin_state.lock().unwrap()) {
                     PluginState::Ready(plugin) => {
                         let tokens: &Vec<Token> = plugin.get_tokens();
@@ -400,33 +449,123 @@ impl eframe::App for MyApp {
                         }
                         let selected_token_idx: usize = self.selected_token_index.unwrap();
 
-                        egui::ScrollArea::horizontal()
-                            .id_salt("token_header")
-                            .show(ui, |ui| {
-                                if self.config.wrapped {
-                                    ui.horizontal_wrapped(|ui| {
-                                        if let Some(idx) = Self::display_token_header(
-                                            ui,
-                                            tokens,
-                                            selected_token_idx,
-                                        ) {
-                                            self.selected_token_index = Some(idx);
-                                        }
-                                    });
-                                } else {
-                                    ui.horizontal(|ui| {
-                                        if let Some(idx) = Self::display_token_header(
-                                            ui,
-                                            tokens,
-                                            selected_token_idx,
-                                        ) {
-                                            self.selected_token_index = Some(idx);
-                                        }
-                                    });
-                                }
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        egui::ScrollArea::horizontal()
+                                            .id_salt("token_header")
+                                            .min_scrolled_height(32.0)
+                                            .show(ui, |ui| {
+                                                ui.vertical(|ui| {
+                                                    if self.config.wrapped {
+                                                        if self.edit_mode {
+                                                            let res = ui.add(
+                                                                egui::TextEdit::multiline(
+                                                                    &mut self.sentence,
+                                                                )
+                                                                .desired_width(f32::INFINITY)
+                                                                .font(egui::FontId::monospace(
+                                                                    PRIMARY_TEXT_SIZE,
+                                                                ))
+                                                                .desired_rows(1),
+                                                            );
+                                                            if res.lost_focus() {
+                                                                self.edit_mode = false;
+                                                            }
+                                                            if !ui
+                                                                .memory(|mem| mem.has_focus(res.id))
+                                                            {
+                                                                res.request_focus();
+                                                            }
+                                                        } else {
+                                                            ui.horizontal_wrapped(|ui| {
+                                                                if let Some(idx) =
+                                                                    Self::display_token_header(
+                                                                        ui,
+                                                                        tokens,
+                                                                        selected_token_idx,
+                                                                    )
+                                                                {
+                                                                    self.selected_token_index =
+                                                                        Some(idx);
+                                                                }
+                                                            });
+                                                        }
+                                                    } else {
+                                                        if self.edit_mode {
+                                                            let res = ui.add(
+                                                                egui::TextEdit::singleline(
+                                                                    &mut self.sentence,
+                                                                )
+                                                                .desired_width(f32::INFINITY)
+                                                                .font(egui::FontId::monospace(
+                                                                    PRIMARY_TEXT_SIZE,
+                                                                ))
+                                                                .desired_rows(1),
+                                                            );
+                                                            if res.lost_focus() {
+                                                                self.edit_mode = false;
+                                                            }
+                                                            if !ui
+                                                                .memory(|mem| mem.has_focus(res.id))
+                                                            {
+                                                                res.request_focus();
+                                                            }
+                                                        } else {
+                                                            ui.horizontal(|ui| {
+                                                                if let Some(idx) =
+                                                                    Self::display_token_header(
+                                                                        ui,
+                                                                        tokens,
+                                                                        selected_token_idx,
+                                                                    )
+                                                                {
+                                                                    self.selected_token_index =
+                                                                        Some(idx);
+                                                                }
+                                                            });
+                                                        }
+                                                    }
 
-                                ui.add_space(SPACING_SIZE);
+                                                    ui.add_space(SPACING_SIZE);
+                                                });
+                                            });
+                                    },
+                                );
                             });
+
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("\u{1F504}").size(TINY_TEXT_SIZE),
+                                            ))
+                                            .on_hover_text(
+                                                RichText::new("Reverse text").size(TINY_TEXT_SIZE),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.sentence = self.sentence.chars().rev().collect();
+                                        }
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("\u{270F}").size(TINY_TEXT_SIZE),
+                                            ))
+                                            .on_hover_text(
+                                                RichText::new("Edit text").size(TINY_TEXT_SIZE),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.edit_mode = true;
+                                        }
+                                    },
+                                );
+                            });
+                        });
 
                         ui.separator();
 
@@ -523,7 +662,7 @@ impl eframe::App for MyApp {
                                     }
                                     if let Some(idx) = clicked_idx {
                                         if self.active_plugin_index != idx {
-                                            self.try_load_plugin(idx);
+                                            self.try_load_plugin(idx, false);
                                         }
                                     }
                                 });
@@ -532,6 +671,9 @@ impl eframe::App for MyApp {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add(egui::Button::new(RichText::new("⚙").size(SMALL_TEXT_SIZE)))
+                                .on_hover_text(
+                                    RichText::new("Not yet implemented").size(TINY_TEXT_SIZE),
+                                )
                                 .clicked()
                             {
                                 // Settings button
@@ -540,20 +682,26 @@ impl eframe::App for MyApp {
                                 .add(egui::Button::new(
                                     RichText::new("\u{1f4cb}").size(SMALL_TEXT_SIZE),
                                 ))
+                                .on_hover_text(
+                                    RichText::new("Copy input to clipboard").size(TINY_TEXT_SIZE),
+                                )
                                 .clicked()
                             {
                                 // Copy button
                                 let sentence: String = self.sentence.to_owned();
                                 std::thread::spawn(|| {
+                                    tracing::debug!("Trying to copy input text to clipboard.");
                                     let mut clipboard: arboard::Clipboard =
                                         arboard::Clipboard::new().unwrap();
                                     clipboard.set_text(sentence).unwrap();
                                     std::thread::sleep(std::time::Duration::from_secs(1));
                                     drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                                    tracing::debug!("Successfully copied input text to clipboard.");
                                 });
                             }
                             if ui
                                 .add(egui::Button::new(RichText::new("ℹ").size(SMALL_TEXT_SIZE)))
+                                .on_hover_text(RichText::new("Open in Web").size(TINY_TEXT_SIZE))
                                 .clicked()
                             {
                                 // Special button
@@ -566,6 +714,14 @@ impl eframe::App for MyApp {
                         });
                     },
                 );
+
+                if curr_sentence != self.sentence {
+                    self.was_edited = true;
+                }
+                if self.was_edited && !self.edit_mode {
+                    self.was_edited = false;
+                    self.try_load_plugin(self.active_plugin_index, true);
+                }
             });
     }
 }

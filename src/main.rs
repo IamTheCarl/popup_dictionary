@@ -13,69 +13,28 @@ use std::io::Cursor;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, atomic::AtomicBool};
+use tracing_subscriber::{
+    EnvFilter, Layer, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 mod tray;
 
 /// Simple Popup dictionary
 #[derive(Parser, Debug)]
-#[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(true))]
-#[cfg(target_os = "linux")]
-struct Args {
-    #[clap(flatten)]
-    modes: Modes,
-
-    #[clap(flatten)]
-    options: Options,
-}
-
-/// Simple Popup dictionary
-#[derive(Parser, Debug)]
 #[command(name = "popup dictionary", version, about, long_about = None, arg_required_else_help(false))]
-#[cfg(target_os = "windows")]
 struct Args {
     #[clap(flatten)]
     modes: Modes,
 
     #[clap(flatten)]
     options: Options,
-}
-
-#[derive(clap::Args, Debug)]
-#[command(next_help_heading = "Modes")]
-#[group(required = true, multiple = false)]
-#[cfg(target_os = "linux")]
-struct Modes {
-    /// Provide input text manually
-    #[arg(short = 't', long = "text", value_name = "STRING")]
-    text: Option<String>,
-
-    /// Get input text from primary clipboard/selection
-    #[arg(short = 'p', long = "primary")]
-    #[cfg(target_os = "linux")]
-    primary: bool,
-
-    /// Get input text from secondary clipboard/selection (x11)
-    #[arg(short = 's', long = "secondary")]
-    #[cfg(target_os = "linux")]
-    secondary: bool,
-
-    /// Get input text from clipboard
-    #[arg(short = 'b', long = "clipboard")]
-    clipboard: bool,
-
-    /// Watch clipboard for newly copied text or image data
-    #[arg(short = 'w', long = "watch")]
-    watch: bool,
-
-    /// Use OCR mode. Reads image from path if provided, otherwise takes image data from stdin
-    #[arg(short = 'o', long = "ocr", value_name = "PATH")]
-    ocr: Option<Option<PathBuf>>,
 }
 
 #[derive(clap::Args, Debug)]
 #[command(next_help_heading = "Modes")]
 #[group(required = false, multiple = false)]
-#[cfg(target_os = "windows")]
 struct Modes {
     /// Provide input text manually
     #[arg(short = 't', long = "text", value_name = "STRING")]
@@ -131,9 +90,23 @@ struct Options {
     #[arg(long = "tray", help_heading = None)]
     show_tray_icon: bool,
 
-    /// Enable verbose logging
+    /// Enable verbose logging to terminal/console
     #[arg(long = "verbose", help_heading = None)]
     verbose: bool,
+
+    #[cfg(target_os = "linux")]
+    /// Enable logging to a file. A path to a file or directory can optionally be provided. Default: ~/.local/share/popup_dictionary/log.txt
+    #[arg(long = "log-file", value_name = "PATH", help_heading = None)]
+    log_file: Option<Option<PathBuf>>,
+
+    #[cfg(target_os = "windows")]
+    /// Enable logging to a file. A path to a folder or file can optionally be provided. Default: %APPDATA%\popup_dictionary\log.txt
+    #[arg(long = "log-file", value_name = "PATH", help_heading = None)]
+    log_file: Option<Option<PathBuf>>,
+
+    #[arg(long = "font", help_heading = None)]
+    /// Specify the name of a font installed on your system to be used for the UI. Default: Noto Sans CJK JP
+    font: Option<String>,
 }
 
 const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
@@ -151,18 +124,12 @@ fn main() -> ExitCode {
 
     let cli: Args = Args::parse();
 
-    #[cfg(debug_assertions)]
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
-    #[cfg(not(debug_assertions))]
-    if cli.options.verbose {
-        env_logger::builder()
-            .filter_level(log::LevelFilter::max())
-            .init();
-    } else {
-        env_logger::init();
-    }
+    init_logging(cli.options.verbose, cli.options.log_file);
+    tracing::info!(
+        "{} {} starting.",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
 
     let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
         initial_plugin: cli.options.initial_plugin,
@@ -171,96 +138,198 @@ fn main() -> ExitCode {
         initial_width: cli.options.initial_width.unwrap_or(450),
         initial_height: cli.options.initial_height.unwrap_or(450),
         show_tray_icon: cli.options.show_tray_icon,
+        font: cli.options.font.unwrap_or(String::from("Noto Sans CJK JP")),
     };
+
+    let paused = Arc::new(AtomicBool::new(false));
+    let ocr_model = Arc::new(AtomicUsize::new(0)); // 0=Tesseract; 1=MangaOCR
+    let mut manga_ocr = None;
 
     #[cfg(target_os = "linux")]
     {
         if config.show_tray_icon {
-            crate::tray::spawn_tray_icon();
+            crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
         }
 
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running text mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.primary {
             if let Err(e) = popup_dictionary::primary(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running primary mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.secondary {
             if let Err(e) = popup_dictionary::secondary(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running secondary mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running clipboard mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
-            if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+            if let Err(e) =
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+            {
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
-                    if let Err(e) = popup_dictionary::ocr(image, config) {
-                        eprintln!("Error: {e}");
+                    if let Err(e) = popup_dictionary::ocr(image, config, 0, &mut manga_ocr) {
+                        tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                    tracing::error!(
+                        "Could not find path or image data to run OCR mode with error: {e}"
+                    );
                     return ExitCode::FAILURE;
                 }
+            }
+        } else {
+            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
+            // Default to watch mode with tray icon if no mode set
+            if !config.show_tray_icon {
+                crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
+            }
+            if let Err(e) =
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+            {
+                tracing::error!("Failed while running watch mode due to error: {e}");
+                return ExitCode::FAILURE;
             }
         }
     }
     #[cfg(target_os = "windows")]
     {
+        if config.show_tray_icon {
+            crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
+        }
+
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running text mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Failed while running clipboard mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
-            if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+            if let Err(e) =
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+            {
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
-                    if let Err(e) = popup_dictionary::ocr(image, config) {
-                        eprintln!("Error: {e}");
+                    if let Err(e) = popup_dictionary::ocr(image, config, 0, &mut manga_ocr) {
+                        tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                    tracing::error!(
+                        "Could not find path or image data to run OCR mode with error: {e}"
+                    );
                     return ExitCode::FAILURE;
                 }
             }
         } else {
-            // Default to watch mode with tray icon if no arguments given on Windows
+            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
+            // Default to watch mode with tray icon if no mode set
             if !config.show_tray_icon {
-                crate::tray::spawn_tray_icon();
+                crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
             }
-            if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+            if let Err(e) =
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+            {
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         }
     }
     ExitCode::SUCCESS
+}
+
+fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
+    let default_filter = if cfg!(debug_assertions) {
+        "debug"
+    } else if verbose {
+        "info"
+    } else {
+        "warn"
+    };
+
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+
+    let terminal_logger = tracing_subscriber::fmt::layer()
+        .with_target(cfg!(debug_assertions))
+        .with_writer(std::io::stderr);
+
+    let mut log_file_error: Option<String> = None;
+
+    let file_logger = if let Some(log_path) = log_file {
+        let result: Result<std::fs::File, String> = (|| {
+            let path = match log_path {
+                Some(p) if p.is_dir() => p.join("log.txt"),
+                Some(p) => p,
+                None => {
+                    let base = match dirs::data_dir() {
+                        Some(path) => path,
+                        None => Err("No valid data path found in environment variables.")?,
+                    };
+                    base.join("popup_dictionary").join("log.txt")
+                }
+            };
+
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Log directory could not be created with error: {e}"))?;
+            }
+
+            std::fs::File::create(&path)
+                .map_err(|e| format!("Log file could not be created with error: {e}"))
+        })();
+
+        match result {
+            Ok(file) => Some(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Arc::new(file))
+                    .with_filter(EnvFilter::new("trace")),
+            ),
+            Err(e) => {
+                log_file_error = Some(e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(terminal_logger)
+        .with(file_logger)
+        .init();
+
+    tracing::debug!("Logger initialized.");
+
+    if let Some(e) = log_file_error {
+        tracing::warn!("Log file unavailable due to error: {e}");
+    }
 }
 
 fn get_image_for_ocr(ocr_arg: Option<PathBuf>) -> Result<DynamicImage, Box<dyn std::error::Error>> {

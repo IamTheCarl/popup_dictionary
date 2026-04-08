@@ -1,6 +1,5 @@
 use egui::containers::Frame;
 use egui::{Context, Ui};
-use log::debug;
 use std::time::{Duration, Instant};
 
 use crate::app::MyApp;
@@ -45,7 +44,7 @@ impl Plugins {
         };
 
         let duration: Duration = start.elapsed();
-        debug!(
+        tracing::debug!(
             "Plugin loaded in: {:.3} ms for sentence length {}",
             duration.as_secs_f64() * 1000.0,
             sentence.len()
