@@ -270,6 +270,8 @@ pub fn ocr(
     tracing::info!("Attempting to run OCR mode.");
 
     let sentence = if ocr_model == 0 {
+        tracing::info!("Using Tesseract.");
+
         // Tesseract
         let tess_command: String = match check_tesseract() {
             Ok(command) => command,
@@ -296,6 +298,8 @@ pub fn ocr(
 
         ocr_image(&tess_command, &image_data)?
     } else if ocr_model == 1 {
+        tracing::info!("Using MangaOCR.");
+
         // MangaOCR
         if manga_ocr.is_none() {
             *manga_ocr = Some(crate::manga_ocr::MangaOcr::new()?);
@@ -305,6 +309,7 @@ pub fn ocr(
             .expect("MangaOCR model could not be created.")
             .ocr_image(&image)?
     } else {
+        tracing::error!("Invalid OCR engine {} is selected.", ocr_model);
         String::new()
     };
 

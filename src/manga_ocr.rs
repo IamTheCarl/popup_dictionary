@@ -16,6 +16,8 @@ impl MangaOcr {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         // Encoder
         let encoder_model_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for Encoder model.");
+
             let mut data_path: PathBuf = match dirs::data_dir() {
                 Some(path) => path,
                 None => Err("No valid data path found in environment variables.").unwrap(),
@@ -27,6 +29,7 @@ impl MangaOcr {
                 .try_exists()
                 .is_ok_and(|verified| verified == true)
             {
+                tracing::debug!("Attempting Encoder model download.");
                 crate::plugins::kihon_plugin::dependencies::fetch_manga_ocr_encoder(&encoder_path)
                     .unwrap();
             }
@@ -40,6 +43,8 @@ impl MangaOcr {
 
         // Decoder
         let decoder_model_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for Decoder model.");
+
             let mut data_path: PathBuf = match dirs::data_dir() {
                 Some(path) => path,
                 None => Err("No valid data path found in environment variables.").unwrap(),
@@ -51,6 +56,7 @@ impl MangaOcr {
                 .try_exists()
                 .is_ok_and(|verified| verified == true)
             {
+                tracing::debug!("Attempting Decoder model download.");
                 crate::plugins::kihon_plugin::dependencies::fetch_manga_ocr_decoder(&decoder_path)
                     .unwrap();
             }
@@ -64,6 +70,8 @@ impl MangaOcr {
 
         // Vocab
         let vocab_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for Vocab model.");
+
             let mut data_path: PathBuf = match dirs::data_dir() {
                 Some(path) => path,
                 None => Err("No valid data path found in environment variables.").unwrap(),
@@ -75,6 +83,7 @@ impl MangaOcr {
                 .try_exists()
                 .is_ok_and(|verified| verified == true)
             {
+                tracing::debug!("Attempting Vocab model download.");
                 crate::plugins::kihon_plugin::dependencies::fetch_manga_ocr_vocab(&vocab_path)
                     .unwrap();
             }
@@ -88,12 +97,15 @@ impl MangaOcr {
         let vocab = vocab_handle
             .join()
             .map_err(|e| format!("Could not parse vocab file: {:?}", e))?;
+        tracing::debug!("Vocab model session successfully built.");
         let decoder_model = decoder_model_handle
             .join()
             .map_err(|e| format!("Could not build decoder session: {:?}", e))?;
+        tracing::debug!("Decoder model session successfully built.");
         let encoder_model = encoder_model_handle
             .join()
             .map_err(|e| format!("Could not build encoder session: {:?}", e))?;
+        tracing::debug!("Encoder model session successfully built.");
 
         Ok(Self {
             encoder_model,
@@ -106,6 +118,8 @@ impl MangaOcr {
     // Thank you!
     // *Slightly modified
     pub fn ocr_image(&mut self, img: &DynamicImage) -> Result<String, Box<dyn Error>> {
+        tracing::debug!("Running MangaOCR on image.");
+
         let (width, height) = img.dimensions();
         let max_dim = width.max(height);
         let mut square_canvas = ImageBuffer::new(max_dim, max_dim);
@@ -126,6 +140,8 @@ impl MangaOcr {
         let image =
             image::imageops::resize(&image, 224, 224, image::imageops::FilterType::Lanczos3);
         */
+
+        tracing::debug!("Image pre-processed.");
 
         // Convert to float32 array and normalize
         let mut tensor = ndarray::Array::zeros((1, 3, 224, 224));
@@ -148,6 +164,8 @@ impl MangaOcr {
 
         // generate
         let mut token_ids: Vec<i64> = vec![2i64]; // Start token
+
+        tracing::debug!("Encoding done. Entering decoding loop.");
 
         for _ in 0..300 {
             // Create input tensors
@@ -179,6 +197,8 @@ impl MangaOcr {
                 break;
             }
         }
+
+        tracing::debug!("Decoding done.");
 
         // decode tokens
         let text = token_ids
