@@ -52,8 +52,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** Implemented pre-process upscaling of input image for Tesseract which
   vastly improves recognition of smaller font sizes.
 
-### Deprecated
-
 ### Removed
 
 - **Core:** The statically linked default font. This effectively reduces the
@@ -66,8 +64,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   vertical confidence is NaN.
 - **Core:** The bug where scrolling horizontally and then clicking on a token in
   the input text would make the scroll-bar jump.
-
-### Security
 
 ---
 
