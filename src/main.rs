@@ -15,9 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, atomic::AtomicBool};
-use tracing_subscriber::{
-    EnvFilter, Layer, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod tray;
 
@@ -113,6 +111,7 @@ struct Options {
     font: Option<String>,
 }
 
+#[cfg(target_os = "windows")]
 const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
 
 fn main() -> ExitCode {

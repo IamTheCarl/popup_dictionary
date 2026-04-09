@@ -10,7 +10,6 @@ use image::Rgba;
 use regex::Regex;
 use std::error::Error;
 use std::io::Cursor;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;

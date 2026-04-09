@@ -1,9 +1,7 @@
-use image::buffer::ConvertBuffer;
-use image::{DynamicImage, GenericImageView, ImageBuffer, Rgb, imageops::FilterType};
-use ndarray::{Array, Array4, s};
+use image::{DynamicImage, GenericImageView, ImageBuffer, imageops::FilterType};
+use ndarray::s;
 use ort::{inputs, session::Session, value::TensorRef};
 use std::error::Error;
-use std::path::Path;
 use std::path::PathBuf;
 
 pub struct MangaOcr {
@@ -24,7 +22,7 @@ impl MangaOcr {
             };
             data_path = data_path.join("popup_dictionary").join("manga-ocr");
 
-            let mut encoder_path = data_path.join("encoder_model.onnx");
+            let encoder_path = data_path.join("encoder_model.onnx");
             if !encoder_path
                 .try_exists()
                 .is_ok_and(|verified| verified == true)
@@ -51,7 +49,7 @@ impl MangaOcr {
             };
             data_path = data_path.join("popup_dictionary").join("manga-ocr");
 
-            let mut decoder_path = data_path.join("decoder_model.onnx");
+            let decoder_path = data_path.join("decoder_model.onnx");
             if !decoder_path
                 .try_exists()
                 .is_ok_and(|verified| verified == true)
@@ -78,7 +76,7 @@ impl MangaOcr {
             };
             data_path = data_path.join("popup_dictionary").join("manga-ocr");
 
-            let mut vocab_path = data_path.join("vocab.txt");
+            let vocab_path = data_path.join("vocab.txt");
             if !vocab_path
                 .try_exists()
                 .is_ok_and(|verified| verified == true)

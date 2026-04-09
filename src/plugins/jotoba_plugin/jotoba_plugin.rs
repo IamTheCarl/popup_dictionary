@@ -1,4 +1,3 @@
-use egui::Color32;
 use egui::Context;
 use egui::RichText;
 use egui::Ui;

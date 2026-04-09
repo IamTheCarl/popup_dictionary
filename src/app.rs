@@ -1,15 +1,6 @@
-#[cfg(feature = "hyprland-support")]
-use hyprland::ctl::plugin;
-
-use eframe::{
-    NativeOptions, egui,
-    epaint::text::{FontInsert, InsertFontFamily},
-};
+use eframe::{NativeOptions, egui};
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use std::{
-    f32::INFINITY,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use crate::plugin::{Plugin, Plugins, Token};
 

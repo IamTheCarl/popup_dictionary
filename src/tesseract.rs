@@ -7,7 +7,9 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+#[cfg(target_os = "windows")]
 const TESS_PATH_WINDOWS: &str = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe";
+#[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
