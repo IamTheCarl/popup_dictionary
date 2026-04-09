@@ -11,6 +11,22 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.2.0] - 2026-04-09
+
+### Added
+
 - **Docs:** A `CHANGELOG.md` for easier tracking of changes.
 - **CLI:** A `--log-file` argument allowing for verbose logging to a file.
 - **Kihon:** A post-generation cleanup step that deletes three dataset files
@@ -84,6 +100,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ---
 
-[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...HEAD
+[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmine-blush/popup_dictionary/releases/tag/v0.1.0
