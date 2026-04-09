@@ -25,7 +25,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
     }
     #[cfg(target_os = "windows")]
     {
-        std::thread::spawn(|| {
+        std::thread::spawn(move || {
             use tray_icon::{
                 Icon, TrayIconBuilder,
                 menu::{Menu, MenuEvent, MenuItem},
@@ -42,7 +42,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
             let icon = Icon::from_rgba(image.into_raw(), width, height).unwrap();
 
             let tray_menu = Menu::new();
-            let active_ocr_model = self.ocr_model.load(Ordering::Relaxed);
+            let active_ocr_model = ocr_model.load(Ordering::Relaxed);
             let ocr_label = if active_ocr_model == 0 {
                 "Switch to MangaOCR"
             } else if active_ocr_model == 1 {
