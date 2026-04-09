@@ -22,12 +22,13 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **UI:** A pause/resume button to the tray menu to pause detection in watch mode.
 - **UI:** Helpful tooltips when hovering over buttons.
 - **Kihon:** A copy button to each definition term.
-- **Core:** MangaOCR as a new OCR engine.
+- **Core:** `MangaOCR` as a new OCR engine.
 - **UI:** A tray menu button which allows switching between Tesseract and MangaOCR.
 - **UI:** An edit button to manually edit the input text.
 - **UI:** A reverse button to reverse the input text. Useful in some cases where
   Tesseract recognizes horizontal text correctly but outputs it in reverse due to
   wrongful parsing as vertical text.
+- **CLI:** An `--ocr-engine` argument for specifying the OCR engine to be used.
 
 ### Changed
 
