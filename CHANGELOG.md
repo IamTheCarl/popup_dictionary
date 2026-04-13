@@ -19,6 +19,14 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Fixed
 
+### Security
+
+---
+
+## [0.2.1] - 2026-04-13
+
+### Fixed
+
 - **Jotoba:** Input text containing percent signs not opening properly in the browser
   due to missing URL encoding.
 - **Core:** File logging not happening at the trace level.
@@ -26,8 +34,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Jotoba:** A bug where English words in the input text would disappear in some
   cases.
 - **Jotoba:** An API request spam while having an invalid word selected.
-
-### Security
 
 ---
 
@@ -104,7 +110,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ---
 
-[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmine-blush/popup_dictionary/releases/tag/v0.1.0
