@@ -3,6 +3,7 @@ use egui::RichText;
 use egui::Ui;
 use egui::containers::Frame;
 use std::cell::RefCell;
+use std::error::Error;
 
 use crate::app::MyApp;
 use crate::plugin::Plugin;
@@ -87,13 +88,14 @@ impl Plugin for JotobaPlugin {
     fn open(&self, ctx: &Context) {
         tracing::info!("Trying to open Jotoba website with input text.");
 
-        ctx.open_url(egui::output::OpenUrl {
-            url: format!(
-                "https://jotoba.de/search/0/{}?l=en-US",
-                self.get_sentence_string()
-            ),
-            new_tab: true,
-        });
+        match self.build_sanitized_url() {
+            Ok(url) => {
+                ctx.open_url(egui::OpenUrl::new_tab(url));
+            }
+            Err(e) => {
+                tracing::warn!("Could not build Jotoba URL due to error: {}", e);
+            }
+        }
     }
 }
 
@@ -104,5 +106,17 @@ impl JotobaPlugin {
             .map(|token| token.input_word.to_owned())
             .collect::<Vec<String>>()
             .join("")
+    }
+
+    fn build_sanitized_url(&self) -> Result<String, Box<dyn Error>> {
+        let mut url =
+            reqwest::Url::parse_with_params("https://jotoba.de/search/0/", &[("l", "en-US")])
+                .map_err(|e| e.to_string())?;
+
+        url.path_segments_mut()
+            .map_err(|_| "URL cannot be a base")?
+            .push(&self.get_sentence_string());
+
+        Ok(url.to_string())
     }
 }

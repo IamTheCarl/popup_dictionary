@@ -19,6 +19,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Fixed
 
+- **Jotoba:** Input text containing percent signs not opening properly in the browser
+  due to missing URL encoding.
+
 ### Security
 
 ---
