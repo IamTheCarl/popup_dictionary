@@ -372,6 +372,16 @@ impl JotobaTokenizer {
 
         if token_cache.is_empty() {
             return Err(Box::from("No matching translation(s) found."));
+        } else {
+            if !previous_word.is_empty() {
+                let cache_len = token_cache.len();
+                if let CachedToken::Valid(parsed_word) = token_cache.get_mut(cache_len - 1).unwrap()
+                {
+                    if parsed_word.word.is_empty() {
+                        parsed_word.word = previous_word;
+                    }
+                }
+            }
         }
 
         let mut tokens: Vec<Token> = Vec::new();

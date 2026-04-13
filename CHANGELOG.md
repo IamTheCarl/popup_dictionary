@@ -21,8 +21,10 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Jotoba:** Input text containing percent signs not opening properly in the browser
   due to missing URL encoding.
-- **Core:** File logging not being set to trace level.
-- **Core:** Editing the input text to be empty causing a crash.
+- **Core:** File logging not happening at the trace level.
+- **Core:** The crash when editing the input text to be empty.
+- **Jotoba:** A bug where English words in the input text would disappear in some
+  cases.
 
 ### Security
 
