@@ -25,6 +25,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** The crash when editing the input text to be empty.
 - **Jotoba:** A bug where English words in the input text would disappear in some
   cases.
+- **Jotoba:** An API request spam while having an invalid word selected.
 
 ### Security
 

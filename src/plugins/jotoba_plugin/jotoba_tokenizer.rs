@@ -486,11 +486,20 @@ impl JotobaTokenizer {
                 .iter()
                 .find(|cached_token| match cached_token {
                     CachedToken::Valid(valid_token) => valid_token.word == token.input_word,
-                    CachedToken::Invalid(_) => false,
+                    CachedToken::Invalid(invalid_word) => invalid_word == &token.input_word,
                 });
 
         match cached_token {
-            Some(CachedToken::Valid(valid_token)) => Ok(valid_token.response.clone()),
+            Some(cached_token) => match cached_token {
+                CachedToken::Valid(valid_token) => Ok(valid_token.response.clone()),
+                CachedToken::Invalid(invalid_word) => Err(Box::from(format!(
+                    "No matching translation(s) cached for token input: {}, deinflection: {}, conjugations: {}, is_valid: {}.",
+                    token.input_word,
+                    token.deinflected_word,
+                    token.conjugations.len(),
+                    token.is_valid()
+                ))),
+            },
             _ => {
                 let response = self.query_words(&token.input_word)?;
                 if !response.words.is_empty() {
