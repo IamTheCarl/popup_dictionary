@@ -719,6 +719,9 @@ impl eframe::App for MyApp {
                 }
                 if self.was_edited && !self.edit_mode {
                     self.was_edited = false;
+                    if self.sentence.is_empty() {
+                        self.sentence = String::from(" ");
+                    }
                     self.try_load_plugin(self.active_plugin_index, true);
                 }
             });
