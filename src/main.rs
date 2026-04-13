@@ -292,7 +292,8 @@ fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
 
     let terminal_logger = tracing_subscriber::fmt::layer()
         .with_target(cfg!(debug_assertions))
-        .with_writer(std::io::stderr);
+        .with_writer(std::io::stderr)
+        .with_filter(filter);
 
     let mut log_file_error: Option<String> = None;
 
@@ -336,7 +337,6 @@ fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
     };
 
     tracing_subscriber::registry()
-        .with(filter)
         .with(terminal_logger)
         .with(file_logger)
         .init();

@@ -21,6 +21,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Jotoba:** Input text containing percent signs not opening properly in the browser
   due to missing URL encoding.
+- **Core:** File logging not being set to trace level.
 
 ### Security
 
