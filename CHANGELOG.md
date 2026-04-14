@@ -11,6 +11,36 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.2.1] - 2026-04-13
+
+### Fixed
+
+- **Jotoba:** Input text containing percent signs not opening properly in the browser
+  due to missing URL encoding.
+- **Core:** File logging not happening at the trace level.
+- **Core:** The crash when editing the input text to be empty.
+- **Jotoba:** A bug where English words in the input text would disappear in some
+  cases.
+- **Jotoba:** An API request spam while having an invalid word selected.
+
+---
+
+## [0.2.0] - 2026-04-09
+
+### Added
+
 - **Docs:** A `CHANGELOG.md` for easier tracking of changes.
 - **CLI:** A `--log-file` argument allowing for verbose logging to a file.
 - **Kihon:** A post-generation cleanup step that deletes three dataset files
@@ -22,20 +52,19 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **UI:** A pause/resume button to the tray menu to pause detection in watch mode.
 - **UI:** Helpful tooltips when hovering over buttons.
 - **Kihon:** A copy button to each definition term.
-- **Core:** MangaOCR as a new OCR engine.
+- **Core:** `MangaOCR` as a new OCR engine.
 - **UI:** A tray menu button which allows switching between Tesseract and MangaOCR.
 - **UI:** An edit button to manually edit the input text.
 - **UI:** A reverse button to reverse the input text. Useful in some cases where
   Tesseract recognizes horizontal text correctly but outputs it in reverse due to
   wrongful parsing as vertical text.
+- **CLI:** An `--ocr-engine` argument for specifying the OCR engine to be used.
 
 ### Changed
 
 - **Core:** Migrated logging system from `log`/`env_logger` to `tracing`.
 - **Core:** Implemented pre-process upscaling of input image for Tesseract which
   vastly improves recognition of smaller font sizes.
-
-### Deprecated
 
 ### Removed
 
@@ -49,8 +78,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   vertical confidence is NaN.
 - **Core:** The bug where scrolling horizontally and then clicking on a token in
   the input text would make the scroll-bar jump.
-
-### Security
 
 ---
 
@@ -83,6 +110,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ---
 
-[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...HEAD
+[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jasmine-blush/popup_dictionary/releases/tag/v0.1.0

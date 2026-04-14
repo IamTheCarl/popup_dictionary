@@ -15,9 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, atomic::AtomicBool};
-use tracing_subscriber::{
-    EnvFilter, Layer, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod tray;
 
@@ -70,6 +68,10 @@ struct Options {
     #[arg(long = "initial-plugin", value_name = "PLUGIN", help_heading = None)]
     initial_plugin: Option<String>,
 
+    /// Which engine to use for OCR. Available: "tesseract", "manga-ocr". Default: "tesseract"
+    #[arg(long = "ocr-engine", value_name = "ENGINE", help_heading = None)]
+    ocr_engine: Option<String>,
+
     /// Try to open the window at the mouse cursor. Unlikely to work on wayland
     #[arg(short = 'm', long = "at-mouse", help_heading = None)]
     open_at_cursor: bool,
@@ -109,6 +111,7 @@ struct Options {
     font: Option<String>,
 }
 
+#[cfg(target_os = "windows")]
 const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
 
 fn main() -> ExitCode {
@@ -141,8 +144,17 @@ fn main() -> ExitCode {
         font: cli.options.font.unwrap_or(String::from("Noto Sans CJK JP")),
     };
 
+    let mut initial_ocr_model: usize = 0;
+    if let Some(ocr_engine) = cli.options.ocr_engine {
+        if ocr_engine == "tesseract" {
+            initial_ocr_model = 0;
+        } else if ocr_engine == "manga-ocr" {
+            initial_ocr_model = 1;
+        }
+    }
+
     let paused = Arc::new(AtomicBool::new(false));
-    let ocr_model = Arc::new(AtomicUsize::new(0)); // 0=Tesseract; 1=MangaOCR
+    let ocr_model = Arc::new(AtomicUsize::new(initial_ocr_model)); // 0=Tesseract; 1=MangaOCR
     let mut manga_ocr = None;
 
     #[cfg(target_os = "linux")]
@@ -181,7 +193,9 @@ fn main() -> ExitCode {
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
-                    if let Err(e) = popup_dictionary::ocr(image, config, 0, &mut manga_ocr) {
+                    if let Err(e) =
+                        popup_dictionary::ocr(image, config, initial_ocr_model, &mut manga_ocr)
+                    {
                         tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
@@ -233,7 +247,9 @@ fn main() -> ExitCode {
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
-                    if let Err(e) = popup_dictionary::ocr(image, config, 0, &mut manga_ocr) {
+                    if let Err(e) =
+                        popup_dictionary::ocr(image, config, initial_ocr_model, &mut manga_ocr)
+                    {
                         tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
@@ -276,7 +292,8 @@ fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
 
     let terminal_logger = tracing_subscriber::fmt::layer()
         .with_target(cfg!(debug_assertions))
-        .with_writer(std::io::stderr);
+        .with_writer(std::io::stderr)
+        .with_filter(filter);
 
     let mut log_file_error: Option<String> = None;
 
@@ -320,7 +337,6 @@ fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
     };
 
     tracing_subscriber::registry()
-        .with(filter)
         .with(terminal_logger)
         .with(file_logger)
         .init();

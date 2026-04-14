@@ -1,7 +1,5 @@
 use egui::epaint::text::{FontInsert, InsertFontFamily};
 use font_kit::{family_name::FamilyName, properties::Properties, source::SystemSource};
-use std::fs::File;
-use std::io;
 
 const FONT_CANDIDATES: [&str; 14] = [
     // Hoping for this to be present
@@ -101,7 +99,7 @@ fn check_system_fonts() -> Option<Vec<u8>> {
 fn check_cached_font() -> Option<Vec<u8>> {
     tracing::debug!("Checking for downloaded default font.");
 
-    if let Some(mut data_dir_path) = dirs::data_dir() {
+    if let Some(data_dir_path) = dirs::data_dir() {
         let font_path = data_dir_path.join("popup_dictionary").join("font.otf");
         std::fs::read(font_path).ok()
     } else {
@@ -123,7 +121,7 @@ fn fetch_font() -> Option<Vec<u8>> {
         .ok()?
         .to_vec();
 
-    if let Some(mut data_dir_path) = dirs::data_dir() {
+    if let Some(data_dir_path) = dirs::data_dir() {
         let font_path = data_dir_path.join("popup_dictionary").join("font.otf");
 
         if let Some(parent) = font_path.parent() {

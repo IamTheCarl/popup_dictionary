@@ -6,13 +6,18 @@ use hyprland::prelude::*;
 use egui::Pos2;
 use enigo::{Enigo, Mouse, Settings};
 use std::error::Error;
+
+#[cfg(any(
+    not(feature = "wayland-support"),
+    all(feature = "wayland-support", feature = "hyprland-support")
+))]
+use crate::app::APP_NAME;
+#[cfg(not(feature = "wayland-support"))]
 use x11rb::{
     connection::Connection,
     protocol::xproto::{AtomEnum, ConfigureWindowAux, ConnectionExt, Window},
     rust_connection::RustConnection,
 };
-
-use crate::app::APP_NAME;
 
 pub fn get_optimal_init_pos(
     #[cfg(feature = "hyprland-support")] is_hyprland: bool,
@@ -21,26 +26,23 @@ pub fn get_optimal_init_pos(
 ) -> Result<Pos2, Box<dyn Error>> {
     let mut cursor_pos: Option<Pos2> = None;
     let mut display_size: Option<Pos2> = None;
-    'outer: {
-        #[cfg(feature = "hyprland-support")]
-        if is_hyprland {
-            use hyprland::data::{CursorPosition, Monitor};
 
-            if let Ok(pos) = CursorPosition::get() {
-                cursor_pos = Some(Pos2::new(pos.x as f32, pos.y as f32));
-            }
-            if let Ok(monitor) = Monitor::get_active() {
-                display_size = Some(Pos2::new(
-                    (monitor.width as i32 + monitor.x) as f32,
-                    (monitor.height as i32 + monitor.y) as f32,
-                ));
-            }
+    #[cfg(feature = "hyprland-support")]
+    if is_hyprland {
+        use hyprland::data::{CursorPosition, Monitor};
 
-            if cursor_pos.is_some() && display_size.is_some() {
-                break 'outer;
-            }
+        if let Ok(pos) = CursorPosition::get() {
+            cursor_pos = Some(Pos2::new(pos.x as f32, pos.y as f32));
         }
+        if let Ok(monitor) = Monitor::get_active() {
+            display_size = Some(Pos2::new(
+                (monitor.width as i32 + monitor.x) as f32,
+                (monitor.height as i32 + monitor.y) as f32,
+            ));
+        }
+    }
 
+    if cursor_pos.is_none() || display_size.is_none() {
         // try x11/windows/macos
         // wayland unlikely to work
         // this can report wrong values, so making sure not to overwrite previous good values
@@ -94,6 +96,7 @@ pub fn get_optimal_init_pos(
     }
 }
 
+#[cfg(not(feature = "wayland-support"))]
 pub fn move_window_x11(x: i32, y: i32) -> Result<(), Box<dyn Error>> {
     tracing::info!("Trying to move window on x11.");
     let (connection, display_idx) = RustConnection::connect(None)?;
@@ -113,6 +116,7 @@ pub fn move_window_x11(x: i32, y: i32) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(not(feature = "wayland-support"))]
 fn find_window_by_title_x11(
     connection: &RustConnection,
     root: Window,
@@ -134,6 +138,7 @@ fn find_window_by_title_x11(
     Ok(None)
 }
 
+#[cfg(not(feature = "wayland-support"))]
 fn get_window_title_x11(
     connection: &RustConnection,
     window: Window,
@@ -166,6 +171,7 @@ fn get_window_title_x11(
     Ok(String::new())
 }
 
+#[cfg(not(feature = "wayland-support"))]
 fn configure_window_pos_x11(
     connection: &RustConnection,
     window: Window,

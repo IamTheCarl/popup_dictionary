@@ -7,7 +7,9 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+#[cfg(target_os = "windows")]
 const TESS_PATH_WINDOWS: &str = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe";
+#[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
@@ -37,7 +39,7 @@ pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
 }
 
 pub fn ocr_image(tess_command: &str, image_data: &[u8]) -> Result<String, Box<dyn Error>> {
-    tracing::debug!("Attempting OCR with Tesseract.");
+    tracing::debug!("Running Tesseract OCR on image.");
 
     #[cfg(target_os = "linux")]
     let ver_conf_command = Command::new(&tess_command)

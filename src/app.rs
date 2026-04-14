@@ -1,15 +1,6 @@
-#[cfg(feature = "hyprland-support")]
-use hyprland::ctl::plugin;
-
-use eframe::{
-    NativeOptions, egui,
-    epaint::text::{FontInsert, InsertFontFamily},
-};
+use eframe::{NativeOptions, egui};
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use std::{
-    f32::INFINITY,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -472,6 +463,9 @@ impl eframe::App for MyApp {
                                                                 .desired_rows(1),
                                                             );
                                                             if res.lost_focus() {
+                                                                tracing::info!(
+                                                                    "Exiting edit mode."
+                                                                );
                                                                 self.edit_mode = false;
                                                             }
                                                             if !ui
@@ -506,6 +500,9 @@ impl eframe::App for MyApp {
                                                                 .desired_rows(1),
                                                             );
                                                             if res.lost_focus() {
+                                                                tracing::info!(
+                                                                    "Exiting edit mode."
+                                                                );
                                                                 self.edit_mode = false;
                                                             }
                                                             if !ui
@@ -549,6 +546,7 @@ impl eframe::App for MyApp {
                                             )
                                             .clicked()
                                         {
+                                            tracing::info!("Reversing input sentence.");
                                             self.sentence = self.sentence.chars().rev().collect();
                                         }
                                         if ui
@@ -560,6 +558,7 @@ impl eframe::App for MyApp {
                                             )
                                             .clicked()
                                         {
+                                            tracing::info!("Entering edit mode.");
                                             self.edit_mode = true;
                                         }
                                     },
@@ -720,6 +719,9 @@ impl eframe::App for MyApp {
                 }
                 if self.was_edited && !self.edit_mode {
                     self.was_edited = false;
+                    if self.sentence.is_empty() {
+                        self.sentence = String::from(" ");
+                    }
                     self.try_load_plugin(self.active_plugin_index, true);
                 }
             });
