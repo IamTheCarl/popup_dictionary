@@ -11,6 +11,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
+- **Jotoba:** Furigana to definition terms.
+
 ### Changed
 
 ### Deprecated
