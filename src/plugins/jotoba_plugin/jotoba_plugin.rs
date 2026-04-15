@@ -12,6 +12,8 @@ use crate::plugin::Plugin;
 use crate::plugin::Token;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::Furigana;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::JotobaTokenizer;
+use crate::plugins::jotoba_plugin::jotoba_tokenizer::PartOfSpeech;
+use crate::plugins::jotoba_plugin::jotoba_tokenizer::SpeechType;
 
 pub struct JotobaPlugin {
     tokens: Vec<Token>,
@@ -81,6 +83,7 @@ impl Plugin for JotobaPlugin {
                             }
                         }
 
+                        /*
                         let mut count: u32 = 1;
                         for sense in &word.senses {
                             ui.label(
@@ -88,8 +91,76 @@ impl Plugin for JotobaPlugin {
                                     .small(),
                             );
                             count += 1;
+                        }*/
+
+                        let mut count: u32 = 0;
+                        let mut last_tags: Vec<PartOfSpeech> = Vec::new();
+                        for sense in &word.senses {
+                            let tags: &Vec<PartOfSpeech> = &sense.pos;
+                            if *tags != last_tags {
+                                last_tags = tags.clone();
+                                if count > 0 {
+                                    ui.add_space(app::SPACING_SIZE);
+                                    count = 1;
+                                }
+                                //ui.add_space(app::SPACING_SIZE * 0.5);
+                                Self::display_tags(ui, &tags);
+                            }
+                            if count == 0 {
+                                count = 1;
+                            }
+
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}.", count))
+                                        .small()
+                                        .color(app::SECONDARY_TEXT_COLOR),
+                                );
+                                ui.label(
+                                    RichText::new(format!("{}", sense.glosses.join(", "))).small(),
+                                );
+                            });
+                            if let Some(info) = &sense.information {
+                                ui.horizontal_top(|ui| {
+                                    ui.label(
+                                        RichText::new(format!("{}.", count))
+                                            .small()
+                                            .color(Color32::TRANSPARENT),
+                                    );
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(
+                                            RichText::new(format!("{}", info))
+                                                .size(app::TINY_TEXT_SIZE * 0.9)
+                                                .color(app::SECONDARY_TEXT_COLOR),
+                                        );
+                                    });
+                                });
+                            }
+
+                            count += 1;
                         }
+
+                        ui.add_space(app::SPACING_SIZE * 0.5);
+
+                        let percent: f32 = 0.8;
+                        let width: f32 = ui.available_width() * percent;
+                        let margin: f32 = (ui.available_width() - width) / 2.0;
+
+                        ui.horizontal(|ui| {
+                            ui.add_space(margin);
+                            let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
+                            ui.painter().line_segment(
+                                [rect.left_center(), rect.right_center()],
+                                egui::Stroke::new(
+                                    1.0,
+                                    Color32::from_rgba_premultiplied(20, 20, 20, 20),
+                                ),
+                            );
+                        });
+
+                        ui.add_space(app::SPACING_SIZE * 0.5);
                     }
+
                     /* });*/
                 }
                 Err(e) => tracing::debug!("Could not display token due to error: {e}"),
@@ -130,6 +201,71 @@ impl JotobaPlugin {
             .push(&self.get_sentence_string());
 
         Ok(url.to_string())
+    }
+
+    fn display_tags(ui: &mut Ui, tags: &Vec<PartOfSpeech>) {
+        ui.horizontal_wrapped(|ui| {
+            for tag in tags {
+                match tag {
+                    PartOfSpeech::Simple(tag) => {
+                        Self::display_tag(ui, tag, tag);
+                    }
+                    PartOfSpeech::Complex(tags) => {
+                        for (tag, speechtype) in tags.iter() {
+                            match speechtype {
+                                SpeechType::Simple(hint) => {
+                                    Self::display_tag(ui, tag, hint);
+                                }
+                                SpeechType::Complex(hints) => {
+                                    for (hint, subhint) in hints {
+                                        Self::display_tag(
+                                            ui,
+                                            tag,
+                                            &format!("{} ({})", hint, subhint),
+                                        );
+                                    }
+                                }
+                            };
+                        }
+                    }
+                };
+            }
+        });
+    }
+
+    // TODO: Almost same exact function copied over from kihon_plugin. Perhaps unify?
+    fn display_tag(ui: &mut Ui, tag: &str, hint: &str) {
+        let text_galley = ui.fonts_mut(|f| {
+            f.layout_no_wrap(
+                tag.to_string(),
+                egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                app::PRIMARY_TEXT_COLOR,
+            )
+        });
+
+        let padding = egui::Vec2::new(4.0, 0.0);
+        let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
+        let response = ui
+            .allocate_rect(rect, egui::Sense::hover())
+            .on_hover_text(RichText::new(hint).size(app::TINY_TEXT_SIZE));
+
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
+        }
+
+        ui.painter().rect_filled(
+            rect,
+            egui::CornerRadius::same(app::CORNER_RADIUS),
+            app::SECONDARY_BACKGROUND_COLOR,
+        );
+
+        ui.painter().galley(
+            (rect.center() - text_galley.size() / 2.0) - egui::Vec2::new(0.0, 2.0),
+            text_galley,
+            app::PRIMARY_TEXT_COLOR,
+        );
+
+        //ui.allocate_space(rect.size());
     }
 
     // TODO: Same exact function copied over from kihon_plugin. Perhaps unify?

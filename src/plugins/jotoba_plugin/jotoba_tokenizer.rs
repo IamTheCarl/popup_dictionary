@@ -8,6 +8,7 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::de;
 use serde::de::Visitor;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
@@ -78,6 +79,22 @@ pub struct Reading {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Sense {
     pub glosses: Vec<String>,
+    pub pos: Vec<PartOfSpeech>,
+    pub information: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum PartOfSpeech {
+    Simple(String),
+    Complex(HashMap<String, SpeechType>),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum SpeechType {
+    Simple(String),
+    Complex(HashMap<String, String>),
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -525,7 +542,6 @@ impl JotobaTokenizer {
             })?;
             transfer.perform()?;
         }
-
         let json: WordsResponse = serde_json::from_str(String::from_utf8(buf.to_vec())?.as_str())?;
 
         Ok(json)

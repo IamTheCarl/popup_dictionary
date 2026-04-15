@@ -11,9 +11,13 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
-- **Jotoba:** Furigana to definition terms.
+- **Jotoba:** Furigana, tags and extra information to definition terms.
 
 ### Changed
+
+- **Jotoba:** Started aligning the way definitions are presented in the Jotoba
+  plugin with the Kihon plugin to lay the groundwork for future unification of
+  definition display.
 
 ### Deprecated
 
