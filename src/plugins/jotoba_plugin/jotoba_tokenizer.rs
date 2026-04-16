@@ -4,7 +4,11 @@ use curl::easy::Easy;
 use curl::easy::List;
 use phf::phf_map;
 use serde::Deserialize;
+use serde::Deserializer;
 use serde::Serialize;
+use serde::de;
+use serde::de::Visitor;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
@@ -69,11 +73,115 @@ pub struct Reading {
     pub kana: String,
     #[serde(default)]
     pub kanji: Option<String>,
+    pub furigana: Option<JotobaFurigana>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Sense {
     pub glosses: Vec<String>,
+    pub pos: Vec<PartOfSpeech>,
+    pub information: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum PartOfSpeech {
+    Simple(String),
+    Complex(HashMap<String, SpeechType>),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum SpeechType {
+    Simple(String),
+    Complex(HashMap<String, String>),
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct JotobaFurigana {
+    pub furigana: Vec<Furigana>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Furigana {
+    pub ruby: String,
+    pub rt: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for JotobaFurigana {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct JotobaFuriganaVisitor;
+
+        impl<'de> Visitor<'de> for JotobaFuriganaVisitor {
+            type Value = JotobaFurigana;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string containing Jotoba furigana data")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_string(v.to_string())
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let mut sections: Vec<String> = Vec::new();
+                let mut curr_section: String = String::new();
+                for c in v.chars() {
+                    if c == '[' || c == ']' {
+                        if !curr_section.is_empty() {
+                            sections.push(curr_section.clone());
+                            curr_section.clear();
+                        }
+                        continue;
+                    }
+                    curr_section.push(c);
+                }
+                if !curr_section.is_empty() {
+                    sections.push(curr_section);
+                }
+
+                let mut furigana: Vec<Furigana> = Vec::new();
+                for section in sections {
+                    if section.contains('|') {
+                        let parts: Vec<&str> = section.split('|').collect();
+                        if parts.len() == 2 {
+                            furigana.push(Furigana {
+                                ruby: parts[0].to_string(),
+                                rt: Some(parts[1].to_string()),
+                            })
+                        } else {
+                            let mut i: usize = 1;
+                            for c in parts[0].chars() {
+                                furigana.push(Furigana {
+                                    ruby: c.to_string(),
+                                    rt: Some(parts[i].to_string()),
+                                });
+                                i += 1;
+                            }
+                        }
+                    } else {
+                        furigana.push(Furigana {
+                            ruby: section,
+                            rt: None,
+                        });
+                    }
+                }
+
+                Ok(JotobaFurigana { furigana: furigana })
+            }
+        }
+
+        deserializer.deserialize_any(JotobaFuriganaVisitor)
+    }
 }
 
 // Jotoba API Suggestion Response
@@ -434,7 +542,6 @@ impl JotobaTokenizer {
             })?;
             transfer.perform()?;
         }
-
         let json: WordsResponse = serde_json::from_str(String::from_utf8(buf.to_vec())?.as_str())?;
 
         Ok(json)
